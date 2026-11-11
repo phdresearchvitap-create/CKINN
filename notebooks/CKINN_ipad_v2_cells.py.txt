@@ -705,3 +705,243 @@ res.to_csv(CACHE / "r1_cox.csv", index=False)
 show = ['cindex', 'auc_3y', 'scaled_brier', 'oe', 'cal_slope', 'viol_rate']
 summary = res.groupby('tier')[show].agg(['mean', 'std']).round(4)
 print("\nR1 Cox baseline, 15 folds per tier (mean, SD):"); print(summary.to_string())
+
+
+# CELL 8 - neural models in NumPy: MLP (Cox partial likelihood) and CKINN (MLP + soft clinical-constraint penalty), protocol section 6
+import pathlib, importlib, sys, time
+import numpy as np, pandas as pd
+if '.' not in sys.path:
+    sys.path.insert(0, '.')
+import ckinn_np as N
+
+SRC = r'''"""ckinn_nn: NumPy implementation of the MLP (Cox partial likelihood) and CKINN (MLP + soft clinical-constraint
+penalty) models of protocol section 6, with manual backpropagation. Depends only on ckinn_np.
+
+Network: Linear(p,64) ReLU Dropout(0.1) Linear(64,64) ReLU Dropout(0.1) Linear(64,1).
+Loss per batch: L_Cox + lambda * sum_j mean_x relu(-s_j * d lp/d x_j)^2, derivatives w.r.t. standardised inputs.
+Training: AdamW (lr 2e-3, weight decay 1e-4), batch 8192, up to 40 epochs, early stopping (patience 4) on a 10%
+validation split, best weights restored. Same settings as src/ckinn/lib.py (PyTorch) in the kit.
+"""
+import numpy as np
+import ckinn_np as N
+
+
+def _cox_batch_loss_grad(lp, t, e):
+    """Cox negative log partial likelihood of one batch (Breslow ties, sorted inside) and its gradient w.r.t. lp."""
+    o = np.argsort(-t, kind='stable')
+    lp_o, e_o = lp[o], e[o]
+    m = lp_o.max()
+    S = np.cumsum(np.exp(lp_o - m))                           # risk-set sums in descending-time order
+    lcse = np.log(S) + m
+    ne = max(e_o.sum(), 1.0)
+    loss = -((lp_o - lcse) * e_o).sum() / ne
+    w = np.cumsum((e_o / S)[::-1])[::-1]                      # sum_{i >= k} e_i / S_i
+    g_o = (-e_o + np.exp(lp_o - m) * w) / ne
+    g = np.empty_like(g_o); g[o] = g_o
+    return loss, g
+
+
+class DeepCox:
+    """MLP with Cox partial-likelihood loss; lam > 0 adds the clinical-constraint penalty (= CKINN)."""
+    def __init__(self, cols, hidden=(64, 64), lam=0.0, priors=None, epochs=40, batch=8192, lr=2e-3,
+                 wd=1e-4, dropout=0.1, seed=0, patience=4, val_frac=0.1, pen_rows=2048, verbose=False):
+        assert len(hidden) == 2, "two hidden layers (protocol section 6)"
+        self.cols, self.hidden, self.lam = list(cols), hidden, lam
+        self.priors = N.PRIORS if priors is None else priors
+        self.epochs, self.batch, self.lr, self.wd, self.dropout = epochs, batch, lr, wd, dropout
+        self.seed, self.patience, self.val_frac, self.pen_rows, self.verbose = seed, patience, val_frac, pen_rows, verbose
+
+    # ---- forward / backward
+    def _init(self, p, rng):
+        h1, h2 = self.hidden
+        def lin(i, o):                                        # PyTorch default: U(-1/sqrt(fan_in), 1/sqrt(fan_in))
+            b = 1.0 / np.sqrt(i)
+            return rng.uniform(-b, b, (i, o)), rng.uniform(-b, b, o)
+        self.W1, self.b1 = lin(p, h1)
+        self.W2, self.b2 = lin(h1, h2)
+        self.W3, self.b3 = lin(h2, 1)
+        self.W3 = self.W3[:, 0]; self.b3 = float(self.b3[0])
+
+    def _forward(self, X, train, rng):
+        z1 = X @ self.W1 + self.b1
+        d1 = (z1 > 0).astype(np.float64)
+        if train and self.dropout > 0:
+            d1 *= rng.random(z1.shape) >= self.dropout
+            d1 /= (1 - self.dropout)
+        a1 = z1 * d1
+        z2 = a1 @ self.W2 + self.b2
+        d2 = (z2 > 0).astype(np.float64)
+        if train and self.dropout > 0:
+            d2 *= rng.random(z2.shape) >= self.dropout
+            d2 /= (1 - self.dropout)
+        a2 = z2 * d2
+        lp = a2 @ self.W3 + self.b3
+        return lp, (X, d1, a1, d2, a2)
+
+    def _backward_lp(self, g_lp, cache):
+        """Gradients of sum_i g_lp_i * lp_i w.r.t. all parameters."""
+        X, d1, a1, d2, a2 = cache
+        gW3 = a2.T @ g_lp; gb3 = g_lp.sum()
+        ga2 = np.outer(g_lp, self.W3) * d2
+        gW2 = a1.T @ ga2; gb2 = ga2.sum(0)
+        ga1 = (ga2 @ self.W2.T) * d1
+        gW1 = X.T @ ga1; gb1 = ga1.sum(0)
+        return gW1, gb1, gW2, gb2, gW3, gb3
+
+    def _penalty(self, cache):
+        """Constraint penalty and its gradient w.r.t. weights. With ReLU masks D1, D2 fixed at the current point,
+        d lp / d x = W1 (D1 * (W2 (D2 * W3))) is linear in each weight matrix, so the gradient is exact."""
+        X, d1, _, d2, _ = cache
+        n = X.shape[0]
+        v = d2 * self.W3                                      # (n, h2)
+        q = v @ self.W2.T                                     # (n, h1)
+        r = d1 * q
+        g = r @ self.W1.T                                     # (n, p): d lp / d x
+        A = np.zeros_like(g)
+        pen = 0.0
+        for j, s in self.cons:
+            u = np.maximum(0.0, -s * g[:, j])
+            pen += (u ** 2).mean()
+            A[:, j] = -2.0 * s * u / n                        # d pen / d g_j
+        gW1 = r.T @ A                                         # (h1, p)^T -> W1 is (p, h1): transpose below
+        b = A @ self.W1                                       # (n, h1): d pen / d r
+        gq = d1 * b
+        gW2 = (v.T @ gq).T                                    # W2 is (h1, h2): dq_k/dW2[m,k] = v_m
+        gv = gq @ self.W2                                     # (n, h2)
+        gW3 = (d2 * gv).sum(0)
+        return pen, gW1.T, gW2, gW3
+
+    # ---- training
+    def fit(self, df):
+        rng = np.random.default_rng(self.seed)
+        self.prep = N.Prep(self.cols).fit(df)
+        X = self.prep.transform(df)
+        T = df.time_y.to_numpy(float); E = df.event.to_numpy(float)
+        self.cons = [(self.prep.names.index(c), float(s)) for c, s in self.priors.items() if c in self.prep.names]
+        self._init(X.shape[1], rng)
+        params = ['W1', 'b1', 'W2', 'b2', 'W3', 'b3']
+        m = {k: np.zeros_like(getattr(self, k)) for k in params}
+        v = {k: np.zeros_like(getattr(self, k)) for k in params}
+        b1, b2, eps, step = 0.9, 0.999, 1e-8, 0
+        perm = rng.permutation(len(X)); nv = int(len(X) * self.val_frac)
+        va, tr = perm[:nv], perm[nv:]
+        best, best_state, bad = np.inf, None, 0
+        self.history_ = []
+        for ep in range(self.epochs):
+            order = tr[rng.permutation(len(tr))]
+            for s0 in range(0, len(order), self.batch):
+                b = order[s0:s0 + self.batch]
+                if E[b].sum() < 1:
+                    continue
+                lp, cache = self._forward(X[b], True, rng)
+                loss, g_lp = _cox_batch_loss_grad(lp, T[b], E[b])
+                grads = dict(zip(params, self._backward_lp(g_lp, cache)))
+                if self.lam > 0 and self.cons:
+                    pc = tuple(c[:self.pen_rows] for c in cache)
+                    pen, pW1, pW2, pW3 = self._penalty(pc)
+                    grads['W1'] = grads['W1'] + self.lam * pW1
+                    grads['W2'] = grads['W2'] + self.lam * pW2
+                    grads['W3'] = grads['W3'] + self.lam * pW3
+                step += 1
+                for k in params:                              # AdamW (decoupled weight decay, as torch.optim.AdamW)
+                    p = getattr(self, k)
+                    m[k] = b1 * m[k] + (1 - b1) * grads[k]
+                    v[k] = b2 * v[k] + (1 - b2) * grads[k] ** 2
+                    mh = m[k] / (1 - b1 ** step); vh = v[k] / (1 - b2 ** step)
+                    p = p * (1 - self.lr * self.wd) - self.lr * mh / (np.sqrt(vh) + eps)
+                    setattr(self, k, p)
+            lp_va, _ = self._forward(X[va], False, rng)
+            vloss, _ = _cox_batch_loss_grad(lp_va, T[va], E[va])
+            self.history_.append(float(vloss))
+            if self.verbose:
+                print(f"epoch {ep:02d} val nll {vloss:.4f}")
+            if vloss < best - 1e-4:
+                best, bad = vloss, 0
+                best_state = {k: getattr(self, k).copy() for k in params}
+            else:
+                bad += 1
+                if bad >= self.patience:
+                    break
+        for k, val in best_state.items():
+            setattr(self, k, val)
+        self.best_val_nll_, self.epochs_run_ = float(best), len(self.history_)
+        return self
+
+    def lp(self, df):
+        return self._forward(self.prep.transform(df), False, None)[0]
+
+
+class CKINNAuto:
+    """CKINN with the constraint strength chosen INSIDE the training data (protocol section 6).
+
+    Fit DeepCox on an 80% inner split for lambda in {0} + grid, score scaled Brier on the inner 20%.
+    Rule: the largest positive lambda whose inner scaled Brier is within `tol` of the best over all four;
+    if none qualifies, the smallest positive lambda (0.1)."""
+    def __init__(self, cols, grid=(0.1, 1.0, 10.0), tol=0.002, epochs=40, seed=0, priors=None, verbose=False):
+        self.cols, self.grid, self.tol, self.epochs, self.seed, self.priors, self.verbose = list(cols), grid, tol, epochs, seed, priors, verbose
+
+    def fit(self, df):
+        fit_part, val = next(N.cv_folds(df, 5, self.seed + 1000))
+        sb = {}
+        for lam in (0.0,) + tuple(self.grid):
+            f = N.fit_with_baseline(DeepCox(self.cols, lam=lam, priors=self.priors, epochs=self.epochs, seed=self.seed), fit_part)
+            sb[lam] = N.evaluate(f, val)['scaled_brier']
+            if self.verbose:
+                print(f"  inner lambda={lam}: scaled Brier {sb[lam]:.4f}")
+        best = max(sb.values())
+        ok = [l for l in self.grid if sb[l] >= best - self.tol]
+        self.lam_ = max(ok) if ok else min(self.grid)
+        self.inner_scaled_brier_ = sb
+        self.model = DeepCox(self.cols, lam=self.lam_, priors=self.priors, epochs=self.epochs, seed=self.seed).fit(df)
+        return self
+
+    def lp(self, df):
+        return self.model.lp(df)
+'''
+pathlib.Path("ckinn_nn.py").write_text(SRC)
+import ckinn_nn as NN
+importlib.reload(NN)
+print("ckinn_nn written and imported:", len(SRC.splitlines()), "lines")
+
+# --- self-test on toy arrays: analytic gradients (Cox loss + penalty, manual backprop) against central differences ---
+rng = np.random.default_rng(1)
+n, p = 300, 5
+X = rng.normal(size=(n, p)); T = rng.exponential(5, n); E = (rng.random(n) < 0.4).astype(float)
+m = NN.DeepCox(list('abcde'), lam=1.0, dropout=0.0, seed=0)
+m.cons = [(0, 1.0), (1, -1.0), (3, 1.0)]; m._init(p, rng)
+def total(model):
+    lp, cache = model._forward(X, False, None)
+    return NN._cox_batch_loss_grad(lp, T, E)[0] + model.lam * model._penalty(cache)[0]
+lp, cache = m._forward(X, False, None)
+_, g_lp = NN._cox_batch_loss_grad(lp, T, E)
+an = dict(zip(['W1', 'b1', 'W2', 'b2', 'W3', 'b3'], m._backward_lp(g_lp, cache)))
+pen, pW1, pW2, pW3 = m._penalty(cache)
+an['W1'] = an['W1'] + m.lam * pW1; an['W2'] = an['W2'] + m.lam * pW2; an['W3'] = an['W3'] + m.lam * pW3
+worst = 0.0
+for k in ['W1', 'b1', 'W2', 'b2', 'W3', 'b3']:
+    flat = np.atleast_1d(getattr(m, k)).reshape(-1); a_flat = np.atleast_1d(an[k]).reshape(-1)
+    for idx in rng.choice(flat.size, min(15, flat.size), replace=False):
+        old = flat[idx]; h = 1e-6
+        flat[idx] = old + h; fp = total(m); flat[idx] = old - h; fm = total(m); flat[idx] = old
+        worst = max(worst, abs((fp - fm) / (2 * h) - a_flat[idx]))
+assert worst < 1e-6, worst
+print(f"gradient check passed (max abs error {worst:.1e}); penalty on toy batch {pen:.5f}")
+
+# --- real data, fold 0 of RICH, tier T2: Cox vs MLP vs CKINN at fixed lambda (lambda selection comes in Cell 9) ---
+CACHE = pathlib.Path("ckinn_cache")
+rich = pd.read_csv(CACHE / "rich_harmonized.csv")
+tr, te = next(N.cv_folds(rich, 5, 0))
+cols = N.TIERS['T2']
+rows = []
+for name, make in [('Cox', lambda: N.CoxLinear(cols)),
+                   ('MLP', lambda: NN.DeepCox(cols, lam=0.0, seed=0)),
+                   ('CKINN lam=1', lambda: NN.DeepCox(cols, lam=1.0, seed=0)),
+                   ('CKINN lam=10', lambda: NN.DeepCox(cols, lam=10.0, seed=0))]:
+    t0 = time.time(); f = N.fit_with_baseline(make(), tr); t_fit = time.time() - t0
+    r = N.evaluate(f, te)
+    per = N.violation_rate(f.model, te)[1]
+    rows.append({'model': name, 'fit s': round(t_fit), 'epochs': getattr(f.model, 'epochs_run_', ''),
+                 **{k: round(r[k], 4) for k in ['cindex', 'auc_3y', 'scaled_brier', 'oe', 'cal_slope', 'viol_rate']},
+                 **{'viol ' + k: round(v, 3) for k, v in per.items()}})
+    print(f"{name:13s} done in {t_fit:.0f} s")
+print(); print(pd.DataFrame(rows).to_string(index=False))
