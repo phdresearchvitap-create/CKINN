@@ -1,0 +1,96 @@
+{
+ "amendment_sha": "ee1c1d75b920e8efb94b7447381a1464d88f3244fb094d09557cb082418e01cd",
+ "updated": "2026-11-11T15:25:16",
+ "items": {
+  "A1.1": {
+   "title": "Additional metrics",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  },
+  "A1.2": {
+   "title": "Additional comparators",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  },
+  "A1.3": {
+   "title": "H1 reported separately from C1",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  },
+  "A1.4": {
+   "title": "Prior ablations",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  },
+  "A1.5": {
+   "title": "Extended extras E4",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  },
+  "A1.6": {
+   "title": "Recalibration audit",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  },
+  "A1.7": {
+   "title": "Cohort-comparability sensitivity",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  },
+  "A1.8": {
+   "title": "Explainability",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  },
+  "A1.9": {
+   "title": "Clinical expert review (gated)",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  },
+  "A1.10": {
+   "title": "Subgroup audit",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  },
+  "A1.11": {
+   "title": "Fairness-aware CKINN",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  },
+  "A1.12": {
+   "title": "Population alignment",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  },
+  "A1.13": {
+   "title": "Knowledge-graph CKINN",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  },
+  "A1.14": {
+   "title": "Glycaemic strata and progression",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  },
+  "A1.15": {
+   "title": "Gated branches",
+   "approved": false,
+   "approved_on": null,
+   "amendment_sha": null
+  }
+ }
+}

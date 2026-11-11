@@ -14,3 +14,8 @@ paper/*.fls
 paper/*.log
 paper/*.out
 paper/main.pdf
+# run records are evidence only on the machine that produced them: a gate must be passed where the analysis runs,
+# never inherited through git. They are exported with the results bundle (notebook cell 87).
+results/audit/
+results/gates/
+results/manifest.jsonl
