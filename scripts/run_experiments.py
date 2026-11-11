@@ -42,8 +42,10 @@ def specs(cols, seed, with_viol_models=True):
             'CKINN': lambda: L.CKINNAuto(cols, tuple(CFG['models']['ckinn_grid']), CFG['models']['tol'], EP, seed)}
 
 
-def tier_df(df, cols):
-    return df.dropna(subset=cols)
+def tier_df(df, cols, complete_case=False):
+    """Protocol section 5: main analyses use every row (training-fold median fill plus missingness indicators
+    inside the models). Rows are dropped only for the complete-case sensitivity analysis S2."""
+    return df.dropna(subset=cols) if complete_case else df
 
 
 def part(name):
@@ -119,7 +121,8 @@ def run_sens(rich, nag, force):
     # S1 diagnosis-only outcome
     d1 = rich.assign(event=rich.event_dx_only.fillna(rich.event).astype(int)) if 'event_dx_only' in rich else rich
     run_cv(d1, force, ['T2'], s['repeats'], s['folds'], 'sensS1')
-    # S2 T4 complete cases is the primary T4 definition; add full-data T3-vs-T4 contrast via XGB only is not pre-specified
+    # S2 RICH T4 complete cases (protocol section 10)
+    run_cv(rich.dropna(subset=L.TIERS['T4']), force, ['T4'], s['repeats'], s['folds'], 'sensS2')
     # S4 cohort-specific extras
     for coh, df in (('RICH', rich), ('NAGALA', nag)):
         x = ex[coh]
