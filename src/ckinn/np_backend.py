@@ -42,9 +42,9 @@ class Prep:
         return out
 
 
-# ------------------------------------------------------------------ Cox partial likelihood (Breslow ties)
+# ------------------------------------------------------------------ Cox partial likelihood (Efron ties)
 def _sort_by_time(t):
-    """Descending time order so that the risk set of row i is rows[:i+1] (ties handled by Breslow)."""
+    """Descending time order so that the risk set of a tie block is every row up to the block's end."""
     return np.argsort(-t, kind='stable')
 
 
@@ -149,12 +149,6 @@ def km_survival(time, event, at):
     return out if np.ndim(at) else float(out[0])
 
 
-def km_survival_left(time, event, at):
-    """S(at-): survival just before `at` (needed for IPCW weights at event times)."""
-    at = np.atleast_1d(np.asarray(at, float))
-    return km_survival(time, event, np.nextafter(at, -np.inf))
-
-
 def km_risk(df, h=H):
     if len(df) < 20 or df.time_y.max() < h or df.event.sum() == 0:
         return np.nan
@@ -234,7 +228,7 @@ def concordance_index(time, lp, event):
         for k in range(i, j):
             bit.add(rank[k])
         i = j
-    return (conc + 0.5 * ties) / max(conc + disc + ties, 1)
+    return float((conc + 0.5 * ties) / max(conc + disc + ties, 1))
 
 
 def ipcw_brier(train, test, risk, h=H):

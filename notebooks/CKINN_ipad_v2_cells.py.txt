@@ -1,4 +1,217 @@
-# CELL 6 - write the NumPy-only survival toolkit (ckinn_np.py) next to the notebook, self-test it on toy arrays, smoke-test on one real fold
+# CELL 1 - environment probe and raw-file check (nothing is modified, no model is trained)
+# Carnets ships NumPy, pandas and matplotlib; packages with compiled code (SciPy, scikit-learn, lifelines,
+# scikit-survival, XGBoost, PyTorch) cannot be installed on iOS, so the toolkit in Cell 6 is NumPy-only.
+import sys, platform, importlib, hashlib, glob, os
+
+print("Python", sys.version.split()[0], "|", platform.machine())
+for name in ["numpy", "pandas", "matplotlib", "openpyxl", "scipy", "sklearn", "lifelines", "sksurv", "xgboost", "torch"]:
+    try:
+        m = importlib.import_module(name)
+        print(f"  OK       {name:12s} {getattr(m, '__version__', '')}")
+    except Exception as e:
+        print(f"  MISSING  {name:12s} ({type(e).__name__})")
+
+# the two Dryad files (any spelling of the names, e.g. 'RC+Health+Care+Data-20180820.xlsx'); SHA-256 from the kit
+EXPECTED = {"RICH":   ("*RC*Health*Care*Data*.xlsx", "ffd341a1a91ac65585b9fba70847a2681f5671a6035d9cfbf92e50795d74fbf6"),
+            "NAGALA": ("*Int*J*Obesity*.xlsx",       "671359aea2019c848f969395f88e57f888eaba8463ea0351bcda8f1c947f5523")}
+
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+print("\nWorking folder:", os.getcwd())
+for cohort, (pattern, sha) in EXPECTED.items():
+    hits = sorted(glob.glob(pattern))
+    if not hits:
+        print(f"  {cohort}: NOT FOUND - copy the .xlsx into this folder (same folder as the notebook)")
+        continue
+    ok = "checksum OK" if sha256(hits[0]) == sha else "CHECKSUM DIFFERS - not the Dryad file"
+    print(f"  {cohort}: {hits[0]}  {os.path.getsize(hits[0]) / 1e6:.1f} MB  {ok}")
+
+
+
+# CELL 2 - install openpyxl (pure Python, installs fine on iOS) and make it importable in this kernel
+import sys, site, subprocess, importlib
+
+usp = site.getusersitepackages()                 # pip installs to the user site on Carnets; add it to sys.path
+if usp not in sys.path:
+    sys.path.append(usp)
+try:
+    import openpyxl
+    print("openpyxl already present:", openpyxl.__version__)
+except ModuleNotFoundError:
+    r = subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "openpyxl"], capture_output=True, text=True)
+    print(r.stdout[-800:], r.stderr[-800:])
+    importlib.invalidate_caches()
+    import openpyxl
+    print("openpyxl installed:", openpyxl.__version__)
+
+
+
+# CELL 3 - verify checksums, read both workbooks once (slow), cache as CSV so every later cell loads in seconds
+import sys, site, glob, time, pathlib
+import pandas as pd
+usp = site.getusersitepackages()
+if usp not in sys.path:
+    sys.path.append(usp)
+
+RICH_XLSX = sorted(glob.glob("*RC*Health*Care*Data*.xlsx"))[0]
+NAGALA_XLSX = sorted(glob.glob("*Int*J*Obesity*.xlsx"))[0]
+EXPECTED = {RICH_XLSX: "ffd341a1a91ac65585b9fba70847a2681f5671a6035d9cfbf92e50795d74fbf6",
+            NAGALA_XLSX: "671359aea2019c848f969395f88e57f888eaba8463ea0351bcda8f1c947f5523"}
+for f, sha in EXPECTED.items():
+    assert sha256(f) == sha, f"checksum differs: {f}"
+print("checksums OK:", RICH_XLSX, "|", NAGALA_XLSX)
+
+CACHE = pathlib.Path("ckinn_cache"); CACHE.mkdir(exist_ok=True)
+for name, f in [("rich_raw", RICH_XLSX), ("nagala_raw", NAGALA_XLSX)]:
+    out = CACHE / f"{name}.csv"
+    if out.exists():
+        print(f"{name}: cached already ({out})"); continue
+    t = time.time()
+    df = pd.read_excel(f, engine="openpyxl")
+    df.to_csv(out, index=False)
+    print(f"{name}: read {df.shape[0]:,} rows x {df.shape[1]} columns in {time.time() - t:.0f} s -> {out}")
+
+rich_raw = pd.read_csv(CACHE / "rich_raw.csv")
+nag_raw = pd.read_csv(CACHE / "nagala_raw.csv")
+assert rich_raw.shape == (211833, 25) and nag_raw.shape == (15464, 31), (rich_raw.shape, nag_raw.shape)
+print("\nRICH  ", rich_raw.shape, "| NAGALA", nag_raw.shape)
+print("RICH columns:", list(rich_raw.columns), "\n")
+print("NAGALA columns:", list(nag_raw.columns))
+
+
+
+# CELL 4 - harmonise RICH and NAGALA into one schema (protocol sections 3-4, data_dictionary.md); missing stays missing
+import pathlib
+import numpy as np, pandas as pd
+CACHE = pathlib.Path("ckinn_cache")
+rich_raw = pd.read_csv(CACHE / "rich_raw.csv")              # reload from cache: safe after a kernel restart
+nag_raw = pd.read_csv(CACHE / "nagala_raw.csv")
+
+r = rich_raw.copy()
+r.columns = ['id','age','sex_raw','site','height','weight','bmi','sbp','dbp','fpg','tc','tg','hdl','ldl',
+             'alt','ast','bun','ccr','fpg_final','dm_dx','censor','time_y','smoke_raw','drink_raw','famhx']
+dx = r.dm_dx.fillna(0).eq(1)
+assert ((r.censor == 1) == (dx | (r.fpg_final >= 7))).all(), "RICH event definition changed"
+rich = pd.DataFrame({
+    'cohort': 'RICH', 'id': r.id, 'site': r.site, 'age': r.age,
+    'sex_male': (r.sex_raw == 1).astype(int),                 # file codes 1 male, 2 female
+    'bmi': r.bmi, 'sbp': r.sbp, 'dbp': r.dbp, 'fpg': r.fpg, 'tc': r.tc, 'tg': r.tg, 'hdl': r.hdl,
+    'alt': r.alt, 'ast': r.ast,
+    'smoke': r.smoke_raw.map({3: 0, 2: 1, 1: 2}),             # 0 never, 1 former, 2 current
+    'famhx': r.famhx, 'hba1c': np.nan, 'exercise': np.nan, 'waist': np.nan, 'fatty_liver': np.nan, 'ggt': np.nan,
+    'time_y': r.time_y, 'event': r.censor.astype(int), 'event_dx_only': dx.astype(int)})
+
+n = nag_raw.copy()
+n.columns = ['id','sex_raw','age','ethanol','fatty','bmi','wc','wc_hi','bmi25','phen','days','alt','ast','wt','exer',
+             'ggt','hdl_mg','hdl','tc_mg','tc','tg_mg','tg','a1c','a1c_mm','alc','smoke_raw','fpg_mg','fpg','sbp','dbp','dm']
+assert set(n.sex_raw.unique()) <= {0, 1}, "NAGALA sex coding changed"
+nag = pd.DataFrame({
+    'cohort': 'NAGALA', 'id': n.id, 'site': 1, 'age': n.age,
+    'sex_male': n.sex_raw.astype(int),                        # data are 0/1; 1 = male (protocol decision D2)
+    'bmi': n.bmi, 'sbp': n.sbp, 'dbp': n.dbp, 'fpg': n.fpg, 'tc': n.tc, 'tg': n.tg, 'hdl': n.hdl,
+    'alt': n.alt, 'ast': n.ast,
+    'smoke': n.smoke_raw.map({1: 0, 2: 1, 3: 2}),
+    'famhx': np.nan, 'hba1c': n.a1c, 'exercise': n.exer, 'waist': n.wc, 'fatty_liver': n.fatty, 'ggt': n.ggt,
+    'time_y': n.days / 365.25, 'event': n.dm.astype(int), 'event_dx_only': np.nan})
+
+for d in (rich, nag):
+    d['age_band'] = pd.cut(d.age, [0, 40, 55, 200], right=False, labels=['<40', '40-54', '55+'])
+rich.to_csv(CACHE / "rich_harmonized.csv", index=False)
+nag.to_csv(CACHE / "nagala_harmonized.csv", index=False)
+
+# locked protocol numbers (sections 2-3) and the source-paper sex count (decision D2)
+assert len(rich) == 211833 and rich.event.sum() == 4174 and rich.event_dx_only.sum() == 1304
+assert len(nag) == 15464 and nag.event.sum() == 373 and nag.sex_male.sum() == 8430
+print("Protocol numbers reproduced: RICH 211,833 / 4,174 events / 1,304 diagnosed; NAGALA 15,464 / 373 events; 8,430 NAGALA men")
+
+def pct(x): return f"{100 * x:.1f}%"
+rows = [("Participants",            lambda d: f"{len(d):,}"),
+        ("Events (rate)",           lambda d: f"{d.event.sum():,} ({pct(d.event.mean())})"),
+        ("Follow-up years, mean (min-max)", lambda d: f"{d.time_y.mean():.2f} ({d.time_y.min():.2f}-{d.time_y.max():.2f})"),
+        ("Median follow-up, years", lambda d: f"{d.time_y.median():.2f}"),
+        ("Incidence per 1,000 person-years", lambda d: f"{1000 * d.event.sum() / d.time_y.sum():.2f}"),
+        ("Male",                    lambda d: pct(d.sex_male.mean())),
+        ("Age, mean (min-max)",     lambda d: f"{d.age.mean():.1f} ({d.age.min():.0f}-{d.age.max():.0f})"),
+        ("BMI, mean",               lambda d: f"{d.bmi.mean():.1f}"),
+        ("FPG, mean (max)",         lambda d: f"{d.fpg.mean():.2f} ({d.fpg.max():.2f})")]
+profile = pd.DataFrame({lab: {"RICH": f(rich), "NAGALA": f(nag)} for lab, f in rows}).T
+print(); print(profile.to_string())
+
+miss = pd.DataFrame({"RICH %": rich.isna().mean() * 100, "NAGALA %": nag.isna().mean() * 100}).round(1)
+miss = miss.loc[['tc', 'tg', 'hdl', 'alt', 'ast', 'smoke', 'famhx', 'hba1c', 'exercise', 'waist', 'fatty_liver', 'ggt']]
+print("\nMissingness (100 = not collected):"); print(miss.to_string())
+
+
+
+# CELL 5 - do the clinical priors (protocol section 7) hold descriptively? Event rate by quintile; Kaplan-Meier by cohort
+import pathlib
+import numpy as np, pandas as pd, matplotlib.pyplot as plt
+CACHE = pathlib.Path("ckinn_cache")
+rich = pd.read_csv(CACHE / "rich_harmonized.csv")
+nag = pd.read_csv(CACHE / "nagala_harmonized.csv")
+FIG = pathlib.Path("ckinn_figs"); FIG.mkdir(exist_ok=True)
+plt.rcParams.update({"figure.dpi": 110, "axes.spines.top": False, "axes.spines.right": False})
+
+H = 3.0                                                        # primary horizon, years (protocol section 6)
+PRIORS = {'age': +1, 'bmi': +1, 'sbp': +1, 'tg': +1, 'fpg': +1, 'hdl': -1,
+          'famhx': +1, 'hba1c': +1, 'exercise': -1}            # +1 risk rises with the variable, -1 falls
+
+def km(time, event, grid):
+    """Kaplan-Meier cumulative incidence on a time grid (pure NumPy)."""
+    t = np.asarray(time, float); e = np.asarray(event, int)
+    order = np.argsort(t); t, e = t[order], e[order]
+    ut, idx = np.unique(t, return_index=True)
+    d = np.add.reduceat(e, idx)                                # events at each unique time
+    n_at_risk = len(t) - idx                                   # at risk just before each unique time
+    surv = np.cumprod(1 - d / n_at_risk)
+    pos = np.searchsorted(ut, grid, side="right") - 1
+    return np.where(pos >= 0, 1 - surv[np.clip(pos, 0, None)], 0.0)
+
+# 1. event rate by quintile for the shared continuous priors
+vars_ = ['age', 'bmi', 'sbp', 'tg', 'fpg', 'hdl']
+fig, axes = plt.subplots(2, 6, figsize=(16, 5), sharey='row')
+summary = []
+for r_, (name, d) in enumerate([("RICH", rich), ("NAGALA", nag)]):
+    for c_, v in enumerate(vars_):
+        q = pd.qcut(d[v], 5, labels=False, duplicates='drop')
+        rate = d.groupby(q).event.mean() * 100
+        ax = axes[r_, c_]
+        ax.plot(range(len(rate)), rate.values, 'o-', color='#E45756' if PRIORS[v] < 0 else '#4C78A8')
+        ax.set_title(f"{name}: {v} (prior {'+' if PRIORS[v] > 0 else '-'})", fontsize=9); ax.set_xlabel("quintile")
+        summary.append({"cohort": name, "variable": v, "prior": "+" if PRIORS[v] > 0 else "-",
+                        "Q1 %": round(rate.values[0], 2), "Q5 %": round(rate.values[-1], 2),
+                        "direction agrees": bool((rate.values[-1] - rate.values[0]) * PRIORS[v] > 0),
+                        "monotone across quintiles": bool(np.all(np.diff(rate.values) * PRIORS[v] >= 0))})
+axes[0, 0].set_ylabel("event rate, %"); axes[1, 0].set_ylabel("event rate, %")
+plt.tight_layout(); plt.savefig(FIG / "05_priors_vs_data.png"); plt.show()
+print(pd.DataFrame(summary).to_string(index=False))
+
+# 2. binary priors (cohort-specific extras)
+print("\nRICH family history: event rate %", rich.groupby('famhx').event.mean().mul(100).round(2).to_dict())
+print("NAGALA exercise habit: event rate %", nag.groupby('exercise').event.mean().mul(100).round(2).to_dict())
+q = pd.qcut(nag.hba1c, 5, labels=False, duplicates='drop')
+print("NAGALA HbA1c quintiles: event rate %", nag.groupby(q).event.mean().mul(100).round(2).tolist())
+
+# 3. Kaplan-Meier cumulative incidence and the censoring problem at the 3-year horizon
+grid = np.linspace(0, 8, 161)
+fig, ax = plt.subplots(figsize=(6, 3.8))
+for name, d in [("RICH", rich), ("NAGALA", nag)]:
+    ax.plot(grid, km(d.time_y, d.event, grid) * 100, label=name)
+ax.axvline(H, ls='--', c='grey'); ax.set_xlabel("years"); ax.set_ylabel("cumulative incidence, %"); ax.legend()
+plt.tight_layout(); plt.savefig(FIG / "05_km.png"); plt.show()
+for name, d in [("RICH", rich), ("NAGALA", nag)]:
+    print(f"{name}: KM 3-year incidence {km(d.time_y, d.event, [H])[0] * 100:.2f}% | "
+          f"censored before 3 y {((d.event == 0) & (d.time_y < H)).mean():.1%} | "
+          f"followed >= 3 y {(d.time_y >= H).mean():.1%}")
+
+
+
+# CELL 6 - write the NumPy-only survival toolkit (ckinn_np.py) next to the notebook, self-test on toy arrays, smoke-test on one real fold
 import pathlib, importlib, sys, time
 import numpy as np, pandas as pd
 
@@ -46,9 +259,9 @@ class Prep:
         return out
 
 
-# ------------------------------------------------------------------ Cox partial likelihood (Breslow ties)
+# ------------------------------------------------------------------ Cox partial likelihood (Efron ties)
 def _sort_by_time(t):
-    """Descending time order so that the risk set of row i is rows[:i+1] (ties handled by Breslow)."""
+    """Descending time order so that the risk set of a tie block is every row up to the block's end."""
     return np.argsort(-t, kind='stable')
 
 
@@ -153,12 +366,6 @@ def km_survival(time, event, at):
     return out if np.ndim(at) else float(out[0])
 
 
-def km_survival_left(time, event, at):
-    """S(at-): survival just before `at` (needed for IPCW weights at event times)."""
-    at = np.atleast_1d(np.asarray(at, float))
-    return km_survival(time, event, np.nextafter(at, -np.inf))
-
-
 def km_risk(df, h=H):
     if len(df) < 20 or df.time_y.max() < h or df.event.sum() == 0:
         return np.nan
@@ -238,7 +445,7 @@ def concordance_index(time, lp, event):
         for k in range(i, j):
             bit.add(rank[k])
         i = j
-    return (conc + 0.5 * ties) / max(conc + disc + ties, 1)
+    return float((conc + 0.5 * ties) / max(conc + disc + ties, 1))
 
 
 def ipcw_brier(train, test, risk, h=H):
@@ -460,3 +667,41 @@ t_eval = time.time() - t0
 print(f"\nCox T1, fold 0: train {len(tr):,} / test {len(te):,} ({m['events']} test events) | fit {t_fit:.1f} s, evaluate {t_eval:.1f} s")
 print(pd.Series(fit.model.beta, index=fit.model.prep.names).round(4).to_string())
 print({k: round(v, 4) for k, v in m.items() if k not in ('n', 'events')})
+
+
+
+# CELL 7 - R1 internal validation, linear Cox baseline: repeated stratified 5-fold CV in RICH, 3 repeats, tiers T1-T4
+# Protocol sections 5, 8, 12: all rows used (median fill + missingness indicators inside the model); CV seed = repeat index.
+# Resumable: each (tier, repeat) writes ckinn_cache/parts/cv_Cox_<tier>_r<rep>.csv and is skipped if present,
+# so the cell can be re-run after an interruption and only the missing units are computed.
+import pathlib, sys, time
+import numpy as np, pandas as pd
+if "." not in sys.path:
+    sys.path.insert(0, ".")
+import ckinn_np as N
+
+CACHE = pathlib.Path("ckinn_cache"); PARTS = CACHE / "parts"; PARTS.mkdir(exist_ok=True)
+rich = pd.read_csv(CACHE / "rich_harmonized.csv")
+FOLDS, REPEATS, TIERS = 5, 3, ['T1', 'T2', 'T3', 'T4']
+
+t_all = time.time()
+for tier in TIERS:
+    cols = N.TIERS[tier]
+    for rep in range(REPEATS):
+        out = PARTS / f"cv_Cox_{tier}_r{rep}.csv"
+        if out.exists():
+            print(f"skip {tier} r{rep} (done)"); continue
+        t0, rows = time.time(), []
+        for k, (tr, te) in enumerate(N.cv_folds(rich, FOLDS, rep)):
+            fit = N.fit_with_baseline(N.CoxLinear(cols), tr)
+            m = N.evaluate(fit, te)
+            rows.append({'model': 'Cox', 'tier': tier, 'repeat': rep, 'fold': k, 'n_train': len(tr), 'n_test': len(te), **m})
+        pd.DataFrame(rows).to_csv(out, index=False)
+        print(f"done {tier} r{rep} in {time.time() - t0:.0f} s")
+print(f"total {time.time() - t_all:.0f} s")
+
+res = pd.concat([pd.read_csv(p) for p in sorted(PARTS.glob("cv_Cox_*_r*.csv"))], ignore_index=True)
+res.to_csv(CACHE / "r1_cox.csv", index=False)
+show = ['cindex', 'auc_3y', 'scaled_brier', 'oe', 'cal_slope', 'viol_rate']
+summary = res.groupby('tier')[show].agg(['mean', 'std']).round(4)
+print("\nR1 Cox baseline, 15 folds per tier (mean, SD):"); print(summary.to_string())
