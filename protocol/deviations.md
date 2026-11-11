@@ -21,3 +21,6 @@ Seven exploratory analyses are added because the proposal asks for them or becau
 6. Cross-cohort analysis at T2 and T3 with RICH restricted to baseline fasting glucose below 6.1 mmol/L. Reason: NAGALA baseline glucose stops at 6.05 mmol/L; RICH extends to 6.99.
 7. Metrics among participants with baseline fasting glucose below 5.6 mmol/L, from saved predictions.
 Results seen: as in D-3. Effect on claims: none.
+
+## D-5 (2026-11-11, before any analysis named in D-4 was run)
+The list of exploratory analyses in D-4 is replaced by `protocol/amendment_A1_PROPOSED.md`, which extends it so that every requirement of the proposal has an analysis (register: `protocol/proposal_coverage.csv`; plan: `notebooks/MASTER_PLAN.md` version 2, 88 cells). D-4 said "adopted"; that is corrected here: every item of A1 is proposed and takes effect only when the investigator records approval. None can enter a C1 to C4 verdict. Results seen: as in D-3. One statement in the earlier 44-cell plan was wrong and is withdrawn: RICH does record a later glycaemic state (fasting glucose at the final visit), so a one-step progression analysis is possible in RICH (A1.14).
