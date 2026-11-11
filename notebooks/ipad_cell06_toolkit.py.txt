@@ -1,0 +1,462 @@
+# CELL 6 - write the NumPy-only survival toolkit (ckinn_np.py) next to the notebook, self-test it on toy arrays, smoke-test on one real fold
+import pathlib, importlib, sys, time
+import numpy as np, pandas as pd
+
+SRC = r'''"""ckinn_np: NumPy-only survival toolkit for the CKINN notebooks (runs on Carnets/iPad).
+
+Replaces lifelines, scikit-survival, scikit-learn and SciPy. Every model exposes .fit(df) and .lp(df)
+(log relative hazard); `fit_with_baseline` adds a Breslow baseline so each model gives absolute 3-year risk.
+Conventions follow the kit's src/ckinn/lib.py so results are comparable with the cloud reference runs.
+Real data only; no imputation beyond training-fold medians plus missingness indicators (protocol section 5).
+"""
+import numpy as np
+import pandas as pd
+
+H = 3.0                                   # primary horizon, years (protocol section 6)
+BASE = ['age', 'sex_male', 'bmi', 'sbp', 'dbp']
+TIERS = {'T1': BASE,
+         'T2': BASE + ['tc', 'tg', 'alt'],
+         'T3': BASE + ['tc', 'tg', 'alt', 'fpg'],
+         'T4': BASE + ['tc', 'tg', 'alt', 'fpg', 'hdl', 'ast']}
+PRIORS = {'age': +1, 'bmi': +1, 'sbp': +1, 'tg': +1, 'fpg': +1, 'hdl': -1,
+          'famhx': +1, 'hba1c': +1, 'exercise': -1}          # protocol section 7
+SMALL_SITES = (0, 16)                     # pooled into training, never a test fold (protocol section 8)
+
+
+# ------------------------------------------------------------------ preprocessing
+class Prep:
+    """Training-fold median fill, missingness indicators (columns with NaN in training), z-scoring."""
+    def __init__(self, cols):
+        self.cols = list(cols)
+
+    def fit(self, df):
+        X = df[self.cols]
+        self.med = X.median()
+        self.ind = [c for c in self.cols if X[c].isna().any()]
+        Xf = X.fillna(self.med)
+        self.mu, self.sd = Xf.mean(), Xf.std().replace(0, 1)
+        self.names = self.cols + [c + '_missing' for c in self.ind]
+        return self
+
+    def transform(self, df):
+        X = df[self.cols]
+        out = ((X.fillna(self.med) - self.mu) / self.sd).to_numpy(np.float64)
+        if self.ind:
+            out = np.hstack([out, X[self.ind].isna().to_numpy(np.float64)])
+        return out
+
+
+# ------------------------------------------------------------------ Cox partial likelihood (Breslow ties)
+def _sort_by_time(t):
+    """Descending time order so that the risk set of row i is rows[:i+1] (ties handled by Breslow)."""
+    return np.argsort(-t, kind='stable')
+
+
+def cox_nll_grad_hess(beta, X, t, e, penalizer=0.0, pen_scale=None):
+    """Negative log partial likelihood with Efron's tie correction, averaged per observation, plus a ridge
+    penalty 0.5 * penalizer * sum_j (pen_scale_j * beta_j)^2 (the objective lifelines' CoxPHFitter maximises,
+    where pen_scale_j is the SD of column j). Returns value, gradient and Hessian."""
+    pen_scale = np.ones(X.shape[1]) if pen_scale is None else np.asarray(pen_scale, float)
+    o = _sort_by_time(t)
+    X, t, e = X[o], t[o], e[o]
+    n, p = X.shape
+    lp = X @ beta
+    lp = lp - lp.max()
+    r = np.exp(lp)
+    rX = r[:, None] * X
+    rXX = rX[:, :, None] * X[:, None, :]
+    # risk-set sums over rows with time >= t_block (descending order: cumulative sums to the end of the tie block)
+    S0, S1, S2 = np.cumsum(r), np.cumsum(rX, axis=0), np.cumsum(rXX, axis=0)
+    _, first = np.unique(-t, return_index=True)             # -t ascends in this order: block starts
+    starts = np.append(first, n)
+    ends = starts[1:] - 1                                   # last index of each block
+    # per-block sums over the events in the block (Efron)
+    ev = (e == 1).astype(float)
+    cE0 = np.cumsum(r * ev); cE1 = np.cumsum(rX * ev[:, None], axis=0); cE2 = np.cumsum(rXX * ev[:, None, None], axis=0)
+    cD = np.cumsum(ev)
+    def block_sum(c):                                       # sum within each block from cumulative sums
+        return c[ends] - np.concatenate([np.zeros_like(c[:1]), c[ends[:-1]]])
+    d = block_sum(cD)                                       # events per block
+    keep = d > 0
+    d, s0, s1, s2 = d[keep], S0[ends][keep], S1[ends][keep], S2[ends][keep]
+    e0, e1, e2 = block_sum(cE0)[keep], block_sum(cE1)[keep], block_sum(cE2)[keep]
+    xsum = block_sum(np.cumsum(X * ev[:, None], axis=0))[keep]
+    lpsum = block_sum(np.cumsum(lp * ev))[keep]
+    nll, grad, hess = -lpsum.sum(), -xsum.sum(0), np.zeros((p, p))
+    for l in range(int(d.max())):
+        m = d > l
+        f = (l / d[m])[:, None]
+        w0 = s0[m] - f[:, 0] * e0[m]
+        w1 = s1[m] - f * e1[m]
+        w2 = s2[m] - f[:, :, None] * e2[m]
+        mu = w1 / w0[:, None]
+        nll += np.log(w0).sum()
+        grad += mu.sum(0)
+        hess += (w2 / w0[:, None, None] - mu[:, :, None] * mu[:, None, :]).sum(0)
+    pen = penalizer * pen_scale ** 2
+    nll = nll / n + 0.5 * (pen * beta * beta).sum()
+    grad = grad / n + pen * beta
+    hess = hess / n + np.diag(pen)
+    return nll, grad, hess
+
+
+class CoxLinear:
+    """Ridge-penalised Cox regression by Newton-Raphson on standardised inputs (lifelines-equivalent)."""
+    def __init__(self, cols, penalizer=0.01, max_iter=50, tol=1e-7):
+        self.cols, self.penalizer, self.max_iter, self.tol = list(cols), penalizer, max_iter, tol
+
+    def fit(self, df):
+        self.prep = Prep(self.cols).fit(df)
+        X = self.prep.transform(df)
+        t, e = df.time_y.to_numpy(float), df.event.to_numpy(int)
+        beta = np.zeros(X.shape[1])
+        scale = X.std(0, ddof=1); scale[scale == 0] = 1.0        # lifelines penalises on its own normalised scale
+        nll, g, Hm = cox_nll_grad_hess(beta, X, t, e, self.penalizer, scale)
+        for _ in range(self.max_iter):
+            step = np.linalg.solve(Hm, g)
+            s = 1.0
+            while True:                                     # backtracking line search
+                nb = beta - s * step
+                nll2, g2, H2 = cox_nll_grad_hess(nb, X, t, e, self.penalizer, scale)
+                if nll2 <= nll + 1e-12 or s < 1e-4:
+                    break
+                s *= 0.5
+            conv = np.abs(nb - beta).max() < self.tol
+            beta, nll, g, Hm = nb, nll2, g2, H2
+            if conv:
+                break
+        self.beta, self.nll_ = beta, nll
+        return self
+
+    def lp(self, df):
+        return self.prep.transform(df) @ self.beta
+
+
+def cox_univariate_slope(z, t, e):
+    """Slope of a one-variable unpenalised Cox fit (used for calibration slope and recalibration)."""
+    d = pd.DataFrame({'z': np.asarray(z, float), 'time_y': t, 'event': e})
+    m = CoxLinear(['z'], penalizer=0.0).fit(d)              # Prep standardises z internally
+    return float(m.beta[0] / m.prep.sd['z'])                # back to the original scale of z
+
+
+# ------------------------------------------------------------------ Kaplan-Meier, Breslow, absolute risk
+def km_survival(time, event, at):
+    """Kaplan-Meier survival S(at) for a scalar or array of times."""
+    t = np.asarray(time, float); e = np.asarray(event, int)
+    o = np.argsort(t); t, e = t[o], e[o]
+    ut, idx = np.unique(t, return_index=True)
+    d = np.add.reduceat(e, idx)
+    n = len(t) - idx
+    surv = np.cumprod(1 - d / n)
+    pos = np.searchsorted(ut, np.atleast_1d(at), side='right') - 1
+    out = np.where(pos >= 0, surv[np.clip(pos, 0, None)], 1.0)
+    return out if np.ndim(at) else float(out[0])
+
+
+def km_survival_left(time, event, at):
+    """S(at-): survival just before `at` (needed for IPCW weights at event times)."""
+    at = np.atleast_1d(np.asarray(at, float))
+    return km_survival(time, event, np.nextafter(at, -np.inf))
+
+
+def km_risk(df, h=H):
+    if len(df) < 20 or df.time_y.max() < h or df.event.sum() == 0:
+        return np.nan
+    return 1 - km_survival(df.time_y, df.event, h)
+
+
+class Breslow:
+    def __init__(self, time, event, lp):
+        o = np.argsort(time)
+        t, e, r = np.asarray(time)[o], np.asarray(event)[o], np.exp(np.clip(np.asarray(lp)[o], -20, 20))
+        S = np.cumsum(r[::-1])[::-1]
+        ut, cnt = np.unique(t[e == 1], return_counts=True)
+        self.t, self.H = ut, np.cumsum(cnt / S[np.searchsorted(t, ut, side='left')])
+
+    def __call__(self, h):
+        i = np.searchsorted(self.t, h, side='right') - 1
+        return 0.0 if i < 0 else float(self.H[i])
+
+
+class Fitted:
+    def __init__(self, model, train):
+        self.model, self.train = model, train
+        self.H0 = Breslow(train.time_y.values, train.event.values, model.lp(train))
+
+    def risk(self, df, h=H):
+        lp = np.asarray(self.model.lp(df), dtype=np.float64)
+        return 1 - np.exp(-self.H0(h) * np.exp(np.clip(lp, -20, 20)))
+
+
+def fit_with_baseline(model, train):
+    return Fitted(model.fit(train), train)
+
+
+class ScaledLP:
+    """Wraps a model and multiplies its lp by a slope (used for recalibration)."""
+    def __init__(self, model, slope):
+        self.model, self.slope, self.cols = model, slope, model.cols
+
+    def lp(self, df):
+        return self.slope * self.model.lp(df)
+
+
+# ------------------------------------------------------------------ metrics
+class _BIT:
+    def __init__(self, n):
+        self.n, self.a = n, np.zeros(n + 1)
+
+    def add(self, i):
+        i += 1
+        while i <= self.n:
+            self.a[i] += 1; i += i & -i
+
+    def prefix(self, i):                                      # count of inserted ranks <= i
+        i += 1; s = 0.0
+        while i > 0:
+            s += self.a[i]; i -= i & -i
+        return s
+
+
+def concordance_index(time, lp, event):
+    """Harrell's C with censoring: higher lp must mean shorter time. Ties in lp count 0.5 (lifelines convention)."""
+    t = np.asarray(time, float); s = np.asarray(lp, float); e = np.asarray(event, int)
+    rank = np.unique(s, return_inverse=True)[1]
+    o = np.argsort(-t, kind='stable')                         # descending time; process later times first
+    t, rank, e = t[o], rank[o], e[o]
+    bit, conc, disc, ties, i, n = _BIT(rank.max() + 1), 0.0, 0.0, 0.0, 0, len(t)
+    while i < n:
+        j = i
+        while j < n and t[j] == t[i]:
+            j += 1
+        for k in range(i, j):                                 # rows with strictly longer time are already in the tree
+            if e[k] == 1:
+                below = bit.prefix(rank[k] - 1) if rank[k] > 0 else 0.0
+                eq = bit.prefix(rank[k]) - below
+                total = bit.prefix(bit.n - 1)
+                conc += below; ties += eq; disc += total - below - eq
+        for k in range(i, j):
+            bit.add(rank[k])
+        i = j
+    return (conc + 0.5 * ties) / max(conc + disc + ties, 1)
+
+
+def ipcw_brier(train, test, risk, h=H):
+    """IPCW Brier score at h (Graf et al.), censoring distribution from the training data (as in scikit-survival)."""
+    t = test.time_y.to_numpy(float); e = test.event.to_numpy(int); S = 1 - np.asarray(risk, float)
+    G_t = km_survival(train.time_y, 1 - train.event, t)      # censoring survival at T_i
+    G_h = km_survival(train.time_y, 1 - train.event, h)
+    case = (t <= h) & (e == 1)
+    ctrl = t > h
+    out = np.zeros(len(t))
+    out[case] = S[case] ** 2 / G_t[case]
+    out[ctrl] = (1 - S[ctrl]) ** 2 / G_h
+    return float(out.mean())
+
+
+def cumulative_dynamic_auc(train, test, lp, h=H):
+    """IPCW cumulative/dynamic AUC at h (Uno et al.), as in scikit-survival: cases weighted by 1/G(T_i)."""
+    t = test.time_y.to_numpy(float); e = test.event.to_numpy(int); s = np.asarray(lp, float)
+    case = (t <= h) & (e == 1); ctrl = t > h
+    w = 1.0 / km_survival(train.time_y, 1 - train.event, t[case])
+    sc, sk = s[case], np.sort(s[ctrl])
+    n_le = np.searchsorted(sk, sc, side='right')              # controls with lp <= case lp
+    return float((w * n_le).sum() / (w.sum() * len(sk)))
+
+
+def cal_slope(risk, df):
+    z = np.log(-np.log1p(-np.clip(np.asarray(risk, dtype=np.float64), 1e-9, 1 - 1e-9)))
+    return cox_univariate_slope(z, df.time_y.to_numpy(float), df.event.to_numpy(int))
+
+
+def violation_rate(model, df, delta=0.25, n=5000, seed=0):
+    """Share of patients where raising a constrained variable by delta SD moves lp against the prior."""
+    s = df.sample(min(n, len(df)), random_state=seed).reset_index(drop=True)
+    base, per = model.lp(s), {}
+    for c in model.cols:
+        if c in PRIORS and s[c].nunique() > 2:
+            p = s.copy()
+            p[c] = p[c] + delta * df[c].std()
+            per[c] = float(np.mean(PRIORS[c] * (model.lp(p) - base) < -1e-6))
+    return (float(np.mean(list(per.values()))) if per else np.nan), per
+
+
+def metrics_from_arrays(train, test, lp, risk, h=H, viol=np.nan):
+    keep = (test.time_y < train.time_y.max()).to_numpy()
+    test, lp, risk = test[keep], np.asarray(lp)[keep], np.asarray(risk, dtype=np.float64)[keep]
+    bs = ipcw_brier(train, test, risk, h)
+    s0 = km_survival(train.time_y, train.event, h)
+    bs0 = ipcw_brier(train, test, np.full(len(test), 1 - s0), h)
+    obs = km_risk(test, h)
+    slope = cal_slope(risk, test)
+    return {'n': len(test), 'events': int(test.event.sum()),
+            'cindex': concordance_index(test.time_y, lp, test.event),
+            'auc_3y': cumulative_dynamic_auc(train, test, lp, h),
+            'brier': bs, 'scaled_brier': 1 - bs / bs0,
+            'obs_risk': obs, 'mean_pred': float(risk.mean()), 'oe': float(obs / risk.mean()),
+            'cal_slope': slope, 'cal_slope_dist': abs(slope - 1.0), 'viol_rate': viol}
+
+
+def evaluate(fit, test, h=H):
+    test = test[test.time_y < fit.train.time_y.max()]
+    return metrics_from_arrays(fit.train, test, fit.model.lp(test), fit.risk(test, h), h,
+                               viol=violation_rate(fit.model, test)[0])
+
+
+def calibration_table_risk(risk, df, h=H, q=10):
+    risk = np.asarray(risk, dtype=np.float64)
+    g = pd.qcut(risk, q, labels=False, duplicates='drop')
+    rows = []
+    for i, d in df.reset_index(drop=True).groupby(g):
+        rows.append({'decile': int(i) + 1, 'n': len(d), 'pred': risk[d.index].mean(), 'obs': km_risk(d, h)})
+    return pd.DataFrame(rows)
+
+
+def decision_curve_risk(risk, df, thresholds=np.arange(0.01, 0.101, 0.01), h=H):
+    risk = np.asarray(risk, dtype=np.float64)
+    prev = km_risk(df, h)
+    out = []
+    for th in thresholds:
+        m = risk >= th
+        p = m.mean()
+        obs = km_risk(df[m], h) if m.sum() >= 20 else np.nan
+        nb = p * obs - p * (1 - obs) * th / (1 - th) if not np.isnan(obs) else np.nan
+        out.append({'threshold': float(th), 'net_benefit': nb, 'treat_all': prev - (1 - prev) * th / (1 - th)})
+    return pd.DataFrame(out)
+
+
+def subgroup_metrics(fit, test, by, h=H):
+    rows = []
+    for g, d in test.groupby(by, observed=True):
+        if d.event.sum() >= 20 and d.time_y.max() >= h:
+            r = evaluate(fit, d, h)
+            rows.append({by: g, **{k: r[k] for k in ['n', 'events', 'cindex', 'auc_3y', 'scaled_brier', 'oe', 'cal_slope']}})
+    return pd.DataFrame(rows)
+
+
+# ------------------------------------------------------------------ splits, transport, inference
+def cv_folds(df, k=5, seed=0):
+    """Stratified k-fold on `event` (shuffled), equivalent to sklearn StratifiedKFold in spirit."""
+    rng = np.random.default_rng(seed)
+    fold = np.empty(len(df), int)
+    for cls in (0, 1):
+        idx = np.flatnonzero(df.event.to_numpy() == cls)
+        rng.shuffle(idx)
+        fold[idx] = np.arange(len(idx)) % k
+    for f in range(k):
+        yield df.iloc[fold != f], df.iloc[fold == f]
+
+
+def loso_folds(rich):
+    for s in sorted(rich.site.unique()):
+        if s in SMALL_SITES:
+            continue
+        yield s, rich[rich.site != s], rich[rich.site == s]
+
+
+def shift_split(df, var, cut):
+    return df[df[var] < cut], df[df[var] >= cut]
+
+
+def recalibrate(fit, target_sample):
+    """Intercept-and-slope recalibration on a small target sample (new slope, new Breslow baseline)."""
+    lp = fit.model.lp(target_sample)
+    slope = cox_univariate_slope(lp, target_sample.time_y.to_numpy(float), target_sample.event.to_numpy(int))
+    return Fitted(ScaledLP(fit.model, slope), target_sample), slope
+
+
+def boot_diff_arrays(train, test, arrs, ref, n_boot=200, seed=0, h=H, max_n=None,
+                     metrics=('cindex', 'scaled_brier', 'cal_slope_dist')):
+    """Paired bootstrap of metric(model) - metric(ref) on the same resampled patients."""
+    rng = np.random.default_rng(seed)
+    if max_n and len(test) > max_n:
+        sel = rng.choice(len(test), max_n, replace=False)
+        test, arrs = test.iloc[sel], {k: (v[0][sel], v[1][sel]) for k, v in arrs.items()}
+    out = {k: {m: [] for m in metrics} for k in arrs if k != ref}
+    for _ in range(n_boot):
+        idx = rng.integers(0, len(test), len(test))
+        b = test.iloc[idx]
+        r_ref = metrics_from_arrays(train, b, arrs[ref][0][idx], arrs[ref][1][idx], h)
+        for k in out:
+            r_k = metrics_from_arrays(train, b, arrs[k][0][idx], arrs[k][1][idx], h)
+            for m in metrics:
+                out[k][m].append(r_k[m] - r_ref[m])
+    rows = []
+    for k, d in out.items():
+        for m, v in d.items():
+            rows.append({'model': k, 'ref': ref, 'metric': m, 'mean': float(np.mean(v)),
+                         'lo95': float(np.percentile(v, 2.5)), 'hi95': float(np.percentile(v, 97.5)), 'n_boot': n_boot})
+    return pd.DataFrame(rows)
+
+
+# two-sided 97.5% Student t quantiles for df 1..30 (no SciPy on the iPad); normal beyond 30
+_T975 = [12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228, 2.201, 2.179, 2.160, 2.145, 2.131,
+         2.120, 2.110, 2.101, 2.093, 2.086, 2.080, 2.074, 2.069, 2.064, 2.060, 2.056, 2.052, 2.048, 2.045, 2.042]
+
+
+def nadeau_bengio(diffs, n_train, n_test):
+    """Corrected resampled t interval (95%) for the mean of paired fold differences (Nadeau & Bengio 2003)."""
+    d = np.asarray(diffs, dtype=float)
+    J = len(d)
+    se = np.sqrt((1.0 / J + n_test / n_train) * d.var(ddof=1))
+    tq = _T975[J - 2] if J - 1 <= 30 else 1.96
+    m = d.mean()
+    return {'mean': m, 'lo95': m - tq * se, 'hi95': m + tq * se, 'J': J}
+'''
+pathlib.Path("ckinn_np.py").write_text(SRC)
+if "." not in sys.path:
+    sys.path.insert(0, ".")
+import ckinn_np as N
+importlib.reload(N)
+print("ckinn_np written and imported:", len(SRC.splitlines()), "lines")
+
+# --- self-tests on hand-made toy arrays only (mirror tests/test_lib.py in the kit; no study data, no results) ---
+def toy(n=400, seed=0):
+    r = np.random.default_rng(seed)
+    x = r.normal(size=n)
+    t = r.exponential(8 / np.exp(0.8 * x))
+    c = r.uniform(1, 6, n)
+    return pd.DataFrame({'age': x, 'bmi': r.normal(size=n), 'time_y': np.minimum(t, c), 'event': (t <= c).astype(int),
+                         'sex_male': r.integers(0, 2, n), 'sbp': r.normal(size=n), 'dbp': r.normal(size=n), 'site': r.integers(1, 5, n)})
+d = toy()
+b = N.Breslow(d.time_y.values, d.event.values, np.zeros(len(d)))
+assert b(1) <= b(3) <= b(6)
+f = N.fit_with_baseline(N.CoxLinear(['age', 'bmi']), d)
+r = f.risk(d)
+assert ((r >= 0) & (r <= 1)).all() and np.corrcoef(r, d.age)[0, 1] > 0.5
+class M:
+    cols = ['age', 'bmi']
+    def lp(self, df): return 1.0 * df.age.values + 0.5 * df.bmi.values
+class Neg(M):
+    def lp(self, df): return -df.age.values
+assert N.violation_rate(M(), d)[0] == 0.0 and N.violation_rate(Neg(), d)[1]['age'] == 1.0
+for tr_, te_ in N.cv_folds(d, 5, 0):
+    assert not set(tr_.index) & set(te_.index)
+dd = np.array([0.01, 0.02, 0.015, 0.0, 0.02, 0.01, 0.012, 0.018, 0.005, 0.02, 0.011, 0.014, 0.016, 0.009, 0.013])
+nb = N.nadeau_bengio(dd, 1000, 250)
+assert nb['hi95'] - nb['lo95'] > 2 * 2.145 * dd.std(ddof=1) / np.sqrt(len(dd))
+d.loc[:5, 'site'] = 0
+assert 0 not in [s for s, _, _ in N.loso_folds(d)]
+# concordance against a brute-force pairwise count
+tt, ss, ee = d.time_y.values[:150], d.age.values[:150], d.event.values[:150]
+conc = disc = 0
+for i in range(150):
+    for j in range(150):
+        if ee[i] == 1 and tt[i] < tt[j]:
+            conc += ss[i] > ss[j]; disc += ss[i] < ss[j]
+assert abs(N.concordance_index(tt, ss, ee) - conc / (conc + disc)) < 1e-12
+print("toy self-tests passed")
+
+# --- smoke test on real data: Cox T1 on fold 0 of RICH (same fold definition as later cells) ---
+CACHE = pathlib.Path("ckinn_cache")
+rich = pd.read_csv(CACHE / "rich_harmonized.csv")
+tr, te = next(N.cv_folds(rich, 5, 0))
+t0 = time.time()
+fit = N.fit_with_baseline(N.CoxLinear(N.TIERS['T1']), tr)
+t_fit = time.time() - t0
+t0 = time.time()
+m = N.evaluate(fit, te)
+t_eval = time.time() - t0
+print(f"\nCox T1, fold 0: train {len(tr):,} / test {len(te):,} ({m['events']} test events) | fit {t_fit:.1f} s, evaluate {t_eval:.1f} s")
+print(pd.Series(fit.model.beta, index=fit.model.prep.names).round(4).to_string())
+print({k: round(v, 4) for k, v in m.items() if k not in ('n', 'events')})
