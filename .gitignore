@@ -1,0 +1,16 @@
+# data never goes into git (CLAUDE.md)
+data/raw/*.xlsx
+data/processed/
+results/
+__pycache__/
+.pytest_cache/
+.ipynb_checkpoints/
+*.pyc
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.fdb_latexmk
+paper/*.fls
+paper/*.log
+paper/*.out
+paper/main.pdf

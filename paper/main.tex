@@ -1,0 +1,44 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern,microtype,booktabs,graphicx,amsmath,amssymb,hyperref}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{setspace}\onehalfspacing
+\input{numbers.tex}
+\title{Clinical-knowledge-informed survival networks for incident type~2 diabetes: discrimination, calibration and transport across two East Asian cohorts}
+\author{Chandu Pothina\thanks{VIT-AP University, India.} \and Gokul Yenduri}
+\date{Draft v0.1 --- numbers are generated from \texttt{results/}}
+\begin{document}
+\maketitle
+\begin{abstract}
+\textbf{Background.} Prediction models for incident type~2 diabetes (T2D) often lose calibration when moved to a new population. We asked whether soft clinical constraints on a neural survival model improve generalisation.
+\textbf{Methods.} We developed CKINN, a Cox neural network whose loss adds a penalty when the learned log-hazard moves against known clinical directions (higher BMI, glucose, triglycerides, blood pressure and age raise risk; higher HDL lowers it). We compared it with Cox regression, gradient-boosted Cox models (with and without monotone constraints) and an unconstrained network on two real cohorts, RICH (China, \nrich{} adults, \evrich{} events) and NAGALA (Japan, \nnagala{} adults, \evnagala{} events), under a protocol locked before cross-cohort analysis. Evaluation covered repeated cross-validation, leave-one-site-out, covariate shift and bidirectional cross-cohort transport.
+\textbf{Results.} \input{abstract_results.tex}
+\textbf{Conclusions.} \input{abstract_conclusions.tex}
+\end{abstract}
+
+\section{Introduction}
+Type~2 diabetes risk models are numerous but rarely transport well: a systematic review found that many were never externally validated or required tests unavailable in routine care \citep{noble2011}. Classical scores such as the Framingham Offspring model rely on a few clinical predictors \citep{wilson2007}, while flexible learners can fit more structure but may violate clinical expectations and lose calibration under population shift \citep{vancalster2019}. Neural survival models extend Cox regression to non-linear effects \citep{katzman2018}. Constraining a learner with domain knowledge, as in physics-informed networks \citep{raissi2019}, is one route to better behaviour outside the training data.
+
+We test whether soft monotone clinical priors improve discrimination, calibration and consistency of a neural Cox model for incident T2D, using two public, real cohorts and an analysis plan fixed before the cross-cohort runs. We state the claims and decision rules in advance (Section~\ref{sec:claims}) and report those not supported as such.
+
+\section{Data}
+\textbf{RICH} is a Chinese health-screening cohort of \nrich{} adults free of diabetes at baseline, with \evrich{} incident cases and mean follow-up \furich{} years \citep{chen2018}. Incident diabetes was fasting plasma glucose of at least 7.00~mmol/L or self-reported diabetes, so the outcome is diagnosis- or biomarker-defined; we also analyse diagnosis-only cases. \textbf{NAGALA} is a Japanese health-screening cohort of \nnagala{} adults (\evnagala{} events, mean follow-up \funagala{} years) from Murakami Memorial Hospital \citep{okamura2019}. Both cohorts exclude baseline diabetes, so the task is incident risk, not detection of undiagnosed diabetes. Baseline fasting glucose is a very strong predictor, so we report predictor tiers: T1 (age, sex, BMI, blood pressure), T2 (plus total cholesterol, triglycerides, ALT), T3 (plus glucose) and T4 (plus HDL and AST, heavily missing in RICH). No synthetic data were used.
+
+\section{Methods}
+\subsection{Models and constraint}
+All models give an absolute 3-year risk $1-\exp\{-H_0(3)e^{\eta(x)}\}$ with a Breslow baseline estimated on the training data \citep{cox1972}. CKINN is a two-layer perceptron (64, 64) trained with the Cox partial likelihood plus
+\begin{equation}
+\mathcal{L}=\mathcal{L}_{\mathrm{Cox}}+\lambda\sum_{j\in\mathcal{C}}\mathbb{E}_x\!\left[\max\!\left(0,-s_j\,\partial\eta(x)/\partial x_j\right)^2\right],
+\end{equation}
+where $s_j=\pm1$ is the expected direction of variable $j$ and derivatives are taken on standardised inputs. With $\lambda=0$ the model is the unconstrained network (MLP), which therefore isolates the effect of the constraint. The constrained set $\mathcal{C}$ is age, BMI, systolic pressure, triglycerides and glucose (up) and HDL (down). Comparators are ridge Cox regression, gradient-boosted Cox \citep{chen2016xgb} and the same boosted model with monotone constraints from $\mathcal{C}$. The strength $\lambda$ is chosen inside each training set from $\{0.1,1,10\}$ by inner-split scaled Brier score.
+
+\subsection{Evaluation}
+\label{sec:claims}
+Analyses were: repeated stratified 5-fold cross-validation in RICH (three repeats); leave-one-site-out across 13 RICH sites; covariate-shift splits by age and BMI; and training on one cohort and testing on the other, with and without intercept-and-slope recalibration on 1\,000 target participants. Metrics at 3 years were the C-index \citep{harrell1996,uno2011}, inverse-probability-of-censoring-weighted Brier score \citep{graf1999} and its scaled form, calibration slope and observed-to-expected ratio \citep{steyerberg2010,vancalster2019}, decision-curve net benefit \citep{vickers2006} and the constraint-violation rate (share of patients whose log-hazard falls when a constrained variable rises by 0.25 SD). Uncertainty came from a paired bootstrap (200 resamples) and, for cross-validation differences, the Nadeau--Bengio corrected resampled $t$ interval \citep{nadeau2003}. Pre-specified claims at tier T2 were: C1, CKINN is not inferior in C-index (lower 95\% limit of the difference from the best baseline above $-0.01$); C2 and C3, CKINN transports better and is better calibrated than the MLP and the monotone boosted model in both directions (bootstrap interval for scaled Brier or calibration distance $|\text{slope}-1|$ excludes zero in favour of CKINN); C4, CKINN violates priors less often than the MLP. Reporting follows TRIPOD \citep{collins2015}.
+
+\input{results.tex}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+\end{document}

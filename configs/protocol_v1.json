@@ -1,0 +1,12 @@
+{
+  "horizon": 3.0,
+  "seed": 0,
+  "models": {"epochs": 40, "xgb_n": 300, "ckinn_grid": [0.1, 1.0, 10.0], "tol": 0.002},
+  "cv": {"folds": 5, "repeats": 3, "tiers": ["T1", "T2", "T3", "T4"]},
+  "loso": {"tiers": ["T1", "T2", "T3"], "subgroup_tier": "T2", "save_preds_tiers": ["T2", "T3"]},
+  "shift": {"tiers": ["T1", "T2", "T3"], "splits": [["age", 45], ["bmi", 25]]},
+  "cross": {"tiers": ["T1", "T2", "T3"], "t4_rich_to_nagala": true, "recal_n": 1000,
+            "boot": {"tiers": ["T2", "T3"], "n": 200, "max_n": 40000}, "subgroup_tier": "T2"},
+  "sens": {"folds": 5, "repeats": 1},
+  "extras": {"RICH": ["famhx", "smoke"], "NAGALA": ["waist", "exercise", "fatty_liver", "ggt"], "NAGALA_E3_extra": ["hba1c"]}
+}

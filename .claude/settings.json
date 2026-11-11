@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": ["Bash(python:*)", "Bash(make:*)", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(latexmk:*)"],
+    "ask": ["Bash(git push:*)", "Bash(git commit:*)"],
+    "deny": ["Edit(protocol/protocol_v1.0_LOCKED.md)", "Edit(protocol/LOCK.sha256)", "Bash(rm -rf:*)"]
+  }
+}
