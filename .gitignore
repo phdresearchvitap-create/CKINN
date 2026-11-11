@@ -1,7 +1,7 @@
 # data never goes into git (CLAUDE.md)
 data/raw/*.xlsx
 data/processed/
-results/
+results/preds/
 __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/

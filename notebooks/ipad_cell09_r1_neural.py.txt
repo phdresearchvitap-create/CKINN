@@ -1,0 +1,46 @@
+# CELL 9 - R1 internal validation for the neural models: MLP (unconstrained) and CKINN (lambda chosen inside each
+# training fold), repeated stratified 5-fold CV in RICH, 3 repeats. Headline tier T2 first, then T1, T3, T4.
+# Protocol section 12 seeds: CV seed = repeat, model seed = 1000*repeat + fold. Resumable per (tier, repeat) unit:
+# each unit writes ckinn_cache/parts/cv_NN_<tier>_r<rep>.csv (about 3 min on the iPad) and is skipped if present.
+import pathlib, sys, time
+import numpy as np, pandas as pd
+if "." not in sys.path:
+    sys.path.insert(0, ".")
+import ckinn_np as N, ckinn_nn as NN
+
+CACHE = pathlib.Path("ckinn_cache"); PARTS = CACHE / "parts"; PARTS.mkdir(exist_ok=True)
+rich = pd.read_csv(CACHE / "rich_harmonized.csv")
+FOLDS, REPEATS, TIERS = 5, 3, ['T2', 'T1', 'T3', 'T4']
+GRID, TOL, EPOCHS = (0.1, 1.0, 10.0), 0.002, 40            # configs/protocol_v1.json
+
+t_all = time.time()
+for tier in TIERS:
+    cols = N.TIERS[tier]
+    for rep in range(REPEATS):
+        out = PARTS / f"cv_NN_{tier}_r{rep}.csv"
+        if out.exists():
+            print(f"skip {tier} r{rep} (done)"); continue
+        t0, rows = time.time(), []
+        for k, (tr, te) in enumerate(N.cv_folds(rich, FOLDS, rep)):
+            seed = 1000 * rep + k
+            for name, make in [('MLP', lambda: NN.DeepCox(cols, lam=0.0, epochs=EPOCHS, seed=seed)),
+                               ('CKINN', lambda: NN.CKINNAuto(cols, GRID, TOL, EPOCHS, seed))]:
+                fit = N.fit_with_baseline(make(), tr)
+                m = N.evaluate(fit, te)
+                inner = getattr(fit.model, 'inner_scaled_brier_', {})
+                rows.append({'model': name, 'tier': tier, 'repeat': rep, 'fold': k, 'n_train': len(tr), 'n_test': len(te),
+                             'lam': getattr(fit.model, 'lam_', 0.0), **m,
+                             **{f'inner_sb_{l}': inner.get(l, np.nan) for l in (0.0,) + GRID}})
+            print(f"  {tier} r{rep} f{k}: lambda={rows[-1]['lam']}  ({time.time() - t0:.0f} s)")
+        pd.DataFrame(rows).to_csv(out, index=False)
+        print(f"done {tier} r{rep} in {time.time() - t0:.0f} s")
+print(f"total {time.time() - t_all:.0f} s")
+
+parts = sorted(PARTS.glob("cv_NN_*_r*.csv"))
+res = pd.concat([pd.read_csv(p) for p in parts], ignore_index=True)
+res.to_csv(CACHE / "r1_nn.csv", index=False)
+show = ['cindex', 'auc_3y', 'scaled_brier', 'oe', 'cal_slope', 'viol_rate']
+print(f"\nR1 neural models, {len(parts)} of 12 units done; folds per tier and model (mean, SD):")
+print(res.groupby(['tier', 'model'])[show].agg(['mean', 'std']).round(4).to_string())
+print("\nlambda chosen by the inner rule, count per tier:")
+print(res[res.model == 'CKINN'].groupby('tier').lam.value_counts().unstack(fill_value=0).to_string())
