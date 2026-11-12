@@ -21,7 +21,7 @@
 #
 # **Not claimable from these data.** Generalization beyond two East Asian health-screening cohorts; causal effects; a physiological differential-equation model; a full multistate progression model; fairness by ethnicity or socio-economic group.
 #
-# **Session rule.** In every new session run cells 2, 3 and 4 first. They take seconds once the raw cache exists.
+# **Session rule.** Run the cells in order the first time. After that, if the kernel restarts (for example when a tablet app is closed or put in the background), simply run the next cell: its first three lines restore the earlier set-up cells automatically.
 
 # %%
 # CELL 2 - environment, seeds, folders, protocol constants, audit helpers        [status L; protocol section 12]
@@ -91,6 +91,52 @@ def write_json(path, obj):
 
 def read_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+# ---------------------------------------------------------------- session restore (for kernels that restart, as on a tablet)
+# Cells that define things later cells need (2, 3, 4, 5, ...) save their own source in ckinn_results/session/. Every later
+# cell starts with three "session guard" lines; if the kernel was restarted, the guard re-runs the saved cells silently.
+SESSION = OUT / "session"
+SESSION.mkdir(parents=True, exist_ok=True)
+_CKINN_LOADED = globals().setdefault("_CKINN_LOADED", set())
+(SESSION / "guard.py").write_text('''
+def _ckinn_restore(g, cell):
+    """Re-run, in order, every saved set-up cell numbered below `cell` that is not loaded in this kernel."""
+    import io, contextlib, pathlib
+    done = g.setdefault("_CKINN_LOADED", set())
+    for f in sorted((pathlib.Path.cwd() / "ckinn_results" / "session").glob("cell_*.py")):
+        n = int(f.stem.split("_")[1])
+        if n >= cell or n in done:
+            continue
+        g["_CKINN_DEPTH"] = g.get("_CKINN_DEPTH", 0) + 1
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                exec(compile(f.read_text(encoding="utf-8"), f.name, "exec"), g)
+        except Exception:
+            print(buf.getvalue()[-3000:])
+            print(f"[set-up cell {n} could not be restored: run cell {n} by hand, then run this cell again]")
+            raise
+        finally:
+            g["_CKINN_DEPTH"] -= 1
+        print(f"[the kernel had restarted: set-up cell {n} was restored automatically]")
+''', encoding="utf-8")
+
+
+def restoring():
+    """True while a saved cell is being re-run by the session guard (nothing is recorded then)."""
+    return globals().get("_CKINN_DEPTH", 0) > 0
+
+
+def keep_for_session(cell):
+    """Call at the end of a cell that later cells depend on: marks it loaded and saves its source for the guard."""
+    _CKINN_LOADED.add(cell)
+    if restoring():
+        return
+    try:
+        (SESSION / f"cell_{cell:02d}.py").write_text(get_ipython().user_ns["In"][-1], encoding="utf-8")
+    except Exception:
+        pass                                   # not running in Jupyter: nothing to save
 
 
 # ---------------------------------------------------------------- protocol constants (locked protocol v1.0; frozen in cell 3)
@@ -191,12 +237,16 @@ class Audit:
                "passed": all(r["ok"] for r in self.rows), "checks": self.rows, "outputs": outputs or {},
                "source_sha": cell_source_hash(), "protocol_sha": PROTOCOL_SHA, "settings_sha": settings_fingerprint(),
                "data_sha": globals().get("DATA_SHA", {}), "env": ENV}
+        n_fail = sum(not r["ok"] for r in self.rows)
+        if restoring():                        # re-run by the session guard: verify again, record nothing
+            if n_fail:
+                raise AssertionError(f"{self.cell}: {n_fail} check(s) failed while the session was being restored.")
+            return rec
         write_json(DIR["audit"] / f"{self.cell}.json", rec)
         if extra_path is not None:
             write_json(extra_path, rec)
         with open(OUT / "manifest.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps({k: rec[k] for k in ("unit", "time", "passed", "protocol_sha", "settings_sha", "source_sha")}) + "\n")
-        n_fail = sum(not r["ok"] for r in self.rows)
         print(f"\n[{self.cell}] {'ALL CHECKS PASSED' if n_fail == 0 else str(n_fail) + ' CHECK(S) FAILED'}"
               f" ({len(self.rows)} checks, {rec['seconds']} s). Record: ckinn_results/audit/{self.cell}.json")
         if n_fail:
@@ -249,11 +299,16 @@ _missing_later = [f"{r['package']} (stage {r['first needed in stage']}, {r['need
 if _missing_later:
     print("\n  Not installed yet, needed later: " + "; ".join(_missing_later))
 _ = A.close(outputs={"work": str(WORK), "missing_later": _missing_later, "tiers": TIERS, "priors": PRIORS, "hp": HP, "eval": EVAL})
+keep_for_session(2)
 
 # %%
 # CELL 3 - settings freeze, deviations register, amendment approvals              [status L; protocol sections 4 to 12]
 # Why: proves that the settings in cell 2 are exactly the locked ones, lists the logged deviations, and records which
 # exploratory items of amendment A1 the investigator has approved. Cells marked A refuse to run without approval.
+# session guard (same three lines in every cell): restores cells 2 to 5 by itself if the kernel was restarted
+_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 3)
 
 # ---- EDIT ONLY THIS BLOCK: set an item to True when you (and your supervisor, where required) approve it. ----------
 A1_APPROVED = {
@@ -383,12 +438,18 @@ print(pd.DataFrame([{"item": k, "approved": v["approved"], "approved on": v["app
                     for k, v in APPROVALS["items"].items()]).to_string(index=False))
 _ = A.close(outputs={"settings_sha": LOCKED_SETTINGS_SHA, "deviations": [d[0] for d in DEVIATIONS], "amendment_sha": A1_SHA,
                      "approved_items": [k for k, v in A1_APPROVED.items() if v]})
+keep_for_session(3)
 
 # %%
 # CELL 4 - raw workbooks: identity by SHA-256, one read, structural assertions, validated cache     [status L; protocol section 2]
 # Why: proves the analysis starts from the two published files, unchanged. The workbooks are opened read-only and are
 # never written. The first run reads the Excel files (RICH can take a few minutes); later runs load a cache that is
 # accepted only if its recorded source hash and its content hash both still match.
+# On a tablet, keep the app open and in front while this cell runs the first time.
+# session guard (same three lines in every cell): restores cells 2 to 5 by itself if the kernel was restarted
+_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 4)
 A = Audit(4, "Raw workbooks: hashes, shapes, headers, cache")
 
 RAW_SPEC = {   # the published files; header_sha is the SHA-256 of the header names joined by newlines
@@ -485,12 +546,17 @@ _ = A.close(outputs={"files": {k: v.name for k, v in RAW_PATH.items()}, "data_sh
                      "shapes": {k: list(v.shape) for k, v in RAW.items()},
                      "content_sha": {k: content_sha(v) for k, v in RAW.items()},
                      "inventory": "ckinn_results/audit/raw_inventory.csv"})
+keep_for_session(4)
 
 # %%
 # CELL 5 - proposal coverage register: every requirement of the 26-page proposal has a cell and a status   [status L]
 # Why: makes it impossible for a proposal requirement to drop out unnoticed. The final audit (cell 86) re-reads this
 # register and demands, for every row, either a result file or a recorded blocking reason.
 # Columns: id, proposal page, proposal section, requirement, verdict, notebook cells, status (L, D, A, G), note.
+# session guard (same three lines in every cell): restores cells 2 to 5 by itself if the kernel was restarted
+_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 5)
 REGISTER_CSV = """
 id,page,section,requirement,verdict,cells,status,note
 P01,1,Title,Name the method CKINN and not PINN,existing data; locked,1;88,L,No differential-equation model is implemented
@@ -634,11 +700,16 @@ print(f"\n  Cells that serve at least one proposal requirement: {len(_used)} of 
       f"The others serve the protocol, the tests and the gates: {sorted(set(range(1, N_CELLS + 1)) - set(_used))}")
 _ = A.close(outputs={"register_sha": REG_SHA, "rows": len(REG), "by_verdict": REG["verdict"].value_counts().to_dict(),
                      "blocked_ids": _blocked["id"].tolist()})
+keep_for_session(5)
 
 # %%
 # CELL 6 - GATE A: governance and source authority                                              [status L]
 # Why: a stop point that re-verifies stage A from the files themselves, not from memory. Stage B starts only if this
 # cell ends with ALL CHECKS PASSED. A record on disk counts only when its hashes equal the current settings and files.
+# session guard (same three lines in every cell): restores cells 2 to 5 by itself if the kernel was restarted
+_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 6)
 A = Audit("gate_A", "Gate A: governance and source authority")
 
 _recs = {c: load_record(c) for c in (2, 3, 4, 5)}
