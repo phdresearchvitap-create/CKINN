@@ -182,7 +182,7 @@ random.seed(SEED)
 np.random.seed(SEED)
 
 # ---------------------------------------------------------------- packages: (import name, first stage that needs it, required or amendment-only)
-PACKAGES = [("numpy", "A", "required"), ("pandas", "A", "required"), ("openpyxl", "A", "required"),
+PACKAGES = [("numpy", "A", "required"), ("pandas", "A", "required"),
             ("matplotlib", "C", "required"), ("scipy", "D", "required"), ("sklearn", "D", "required"),
             ("lifelines", "D", "cross-check"), ("xgboost", "E", "required"), ("torch", "F", "required"),
             ("sksurv", "E", "amendment A1.2"), ("lightgbm", "E", "amendment A1.2"), ("shap", "I", "amendment A1.8")]
@@ -287,8 +287,8 @@ print(PKG.to_string(index=False), "\n")
 
 _have = dict(zip(PKG["package"], PKG["version"]))
 A.check("Python is 3.9 or newer", sys.version_info >= (3, 9), ENV["python"])
-A.check("packages needed in stages A and B are installed (numpy, pandas, openpyxl)",
-        all(_have[p] != "NOT INSTALLED" for p in ("numpy", "pandas", "openpyxl")))
+A.check("packages needed in stages A and B are installed (numpy, pandas)",
+        all(_have[p] != "NOT INSTALLED" for p in ("numpy", "pandas")))
 A.check("one computation thread is set", ENV["threads"] == 1, f"CKINN_THREADS={ENV['threads']}")
 A.check("output folders exist and are writable", all(os.access(p, os.W_OK) for p in DIR.values()))
 A.check("tiers are nested T1 < T2 < T3 < T4",
@@ -443,8 +443,9 @@ keep_for_session(3)
 # %%
 # CELL 4 - raw workbooks: identity by SHA-256, one read, structural assertions, validated cache     [status L; protocol section 2]
 # Why: proves the analysis starts from the two published files, unchanged. The workbooks are opened read-only and are
-# never written. The first run reads the Excel files (RICH can take a few minutes); later runs load a cache that is
-# accepted only if its recorded source hash and its content hash both still match.
+# never written. The Excel files are read with the Python standard library only (no openpyxl needed). The first run
+# reads them (RICH can take a few minutes); later runs load a cache that is accepted only if its recorded source hash
+# and its content hash both still match.
 # On a tablet, keep the app open and in front while this cell runs the first time.
 # session guard (same three lines in every cell): restores cells 2 to 5 by itself if the kernel was restarted
 _g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
@@ -453,11 +454,11 @@ exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 4)
 A = Audit(4, "Raw workbooks: hashes, shapes, headers, cache")
 
 RAW_SPEC = {   # the published files; header_sha is the SHA-256 of the header names joined by newlines
-    "NAGALA": {"usual_name": "DatasetIntJObesity.xlsx", "sheets": ["Sheet 1"], "shape": (15464, 31),
+    "NAGALA": {"usual_name": "DatasetIntJObesity.xlsx", "sheets": ["Sheet 1"], "shape": (15464, 31), "filled_cells": 479373,
                "sha": "671359aea2019c848f969395f88e57f888eaba8463ea0351bcda8f1c947f5523",
                "header_sha": "db9dbc8f949105a4578326f421d54262641c5ff6645241fc69c36c22a980962d",
                "first": "Patient Number", "last": "Incident DM 0/1"},
-    "RICH": {"usual_name": "RCHealthCareData-20180820.xlsx", "sheets": ["RC"], "shape": (211833, 25),
+    "RICH": {"usual_name": "RCHealthCareData-20180820.xlsx", "sheets": ["RC"], "shape": (211833, 25), "filled_cells": 4426500,
              "sha": "ffd341a1a91ac65585b9fba70847a2681f5671a6035d9cfbf92e50795d74fbf6",
              "header_sha": "88782dd81f55586b5753d6f87b2a8dc00b106561f48c5dcb3c8ec28341849bcc",
              "first": "id", "last": "family histroy of diabetes(1,Yes;0,No)"},
@@ -472,6 +473,65 @@ def excel_letter(i):
         i, r = divmod(i - 1, 26)
         s = chr(65 + r) + s
     return s
+
+
+def read_xlsx_first_sheet(path):
+    """Read the first worksheet of an .xlsx workbook with the standard library only (an .xlsx file is a zip of XML).
+    Returns (sheet names, DataFrame). The first row gives the column names. Every number is taken exactly as stored
+    (for a formula cell, the value Excel saved); a cell that is absent in the file is missing (NaN)."""
+    import zipfile
+    import xml.etree.ElementTree as ET
+    M = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+    P = "{http://schemas.openxmlformats.org/package/2006/relationships}"
+
+    def col_index(ref, _memo={}):
+        letters = ref.rstrip("0123456789")
+        if letters not in _memo:
+            k = 0
+            for ch in letters:
+                k = k * 26 + (ord(ch) - 64)
+            _memo[letters] = k - 1
+        return _memo[letters]
+
+    with zipfile.ZipFile(path) as z:
+        sheets = [(e.get("name"), e.get(R + "id")) for e in ET.fromstring(z.read("xl/workbook.xml")).iter(M + "sheet")]
+        targets = {e.get("Id"): e.get("Target") for e in ET.fromstring(z.read("xl/_rels/workbook.xml.rels")).iter(P + "Relationship")}
+        shared = []
+        if "xl/sharedStrings.xml" in z.namelist():
+            for si in ET.fromstring(z.read("xl/sharedStrings.xml")).iter(M + "si"):
+                shared.append("".join((t.text or "") for t in si.iter(M + "t")))
+        target = targets[sheets[0][1]]
+        member = target.lstrip("/") if target.startswith("/") else "xl/" + target
+        header, rows = None, []
+        with z.open(member) as f:
+            for _event, el in ET.iterparse(f):
+                if el.tag != M + "row":
+                    continue
+                cells = {}
+                for c in el:
+                    v = c.find(M + "v")
+                    if v is None or v.text is None:
+                        continue
+                    kind, txt = c.get("t", "n"), v.text
+                    if kind == "s":
+                        val = shared[int(txt)]
+                    elif kind == "n":
+                        val = int(txt) if txt.lstrip("-").isdigit() else float(txt)
+                    elif kind == "b":
+                        val = bool(int(txt))
+                    else:
+                        raise ValueError(f"unexpected cell type {kind!r} at {c.get('r')} in {Path(path).name}")
+                    cells[col_index(c.get("r"))] = val
+                el.clear()
+                if header is None:
+                    header = [cells.get(k) for k in range(max(cells) + 1)]
+                elif cells:
+                    row = [None] * len(header)
+                    for k, val in cells.items():
+                        row[k] = val
+                    rows.append(row)
+    return [n for n, _id in sheets], pd.DataFrame(rows, columns=header)
 
 
 def content_sha(df):
@@ -506,10 +566,7 @@ for cohort, spec in RAW_SPEC.items():
                 df = cand
     if df is None:
         t0 = time.time()
-        xl = pd.ExcelFile(path, engine="openpyxl")
-        sheets = list(xl.sheet_names)
-        df = xl.parse(sheets[0])
-        xl.close()
+        sheets, df = read_xlsx_first_sheet(path)
         source = f"Excel, read in {time.time() - t0:.0f} s"
         df.to_pickle(cache)
         write_json(meta_p, {"cohort": cohort, "source_file": path.name, "source_sha": spec["sha"], "sheets": sheets,
@@ -521,6 +578,8 @@ for cohort, spec in RAW_SPEC.items():
     A.check(f"{cohort}: the raw file still has the published SHA-256 after reading", sha256_file(path) == spec["sha"])
     A.check(f"{cohort}: single worksheet named {spec['sheets']}", meta["sheets"] == spec["sheets"], meta["sheets"])
     A.check(f"{cohort}: {spec['shape'][0]:,} rows by {spec['shape'][1]} columns", df.shape == spec["shape"], df.shape)
+    A.check(f"{cohort}: {spec['filled_cells']:,} filled cells were read (none lost, none invented)",
+            int(df.notna().sum().sum()) == spec["filled_cells"], int(df.notna().sum().sum()))
     A.check(f"{cohort}: header names are exactly those of the published file",
             sha256_text("\n".join(map(str, df.columns))) == spec["header_sha"])
     A.check(f"{cohort}: first and last columns", (df.columns[0], df.columns[-1]) == (spec["first"], spec["last"]))
