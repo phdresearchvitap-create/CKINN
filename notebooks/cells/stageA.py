@@ -393,11 +393,14 @@ DEVIATIONS = [
     ("D-3", "2026-11-11", "Exact zeros in triglycerides, HDL, ALT and AST are treated as not measured and set to missing; no row is removed.", "none on the rules"),
     ("D-4", "2026-11-11", "Exploratory analyses requested by the proposal were added; replaced by amendment A1 (see D-5).", "none"),
     ("D-5", "2026-11-11", "Amendment A1: fifteen exploratory items, each proposed and effective only when approved below.", "none"),
+    ("D-6", "2026-11-12", "Software on the tablet: the study runs in Carnets Plus on an iPad, where XGBoost and PyTorch cannot be installed. The boosted "
+                          "Cox models and the networks are fitted with NumPy code of the same algorithms and locked settings (boosting: 300 trees, depth 3, "
+                          "rate 0.05, L2 penalty 1, minimum child weight 20, no random subsampling). Logged before any model result existed.", "none on the rules"),
 ]
 print("\n  Deviations on file:")
 for d_id, d_date, d_text, d_effect in DEVIATIONS:
     print(f"   {d_id}  {d_date}  {d_text}  Effect on C1 to C4: {d_effect}.")
-A.check("deviations D-1 to D-5 are listed", [d[0] for d in DEVIATIONS] == [f"D-{i}" for i in range(1, 6)])
+A.check("deviations D-1 to D-6 are listed", [d[0] for d in DEVIATIONS] == [f"D-{i}" for i in range(1, 7)])
 A.check("deviation D-1 is implemented in the settings (site 14 never tested)", NO_TEST_SITES == (14,))
 
 # 5. amendment A1: items and approvals

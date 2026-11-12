@@ -1,0 +1,141 @@
+# %%
+# CELL 3 - settings freeze, deviations register, amendment approvals              [status L; protocol sections 4 to 12]
+# Why: proves that the settings in cell 2 are exactly the locked ones, lists the logged deviations, and records which
+# exploratory items of amendment A1 the investigator has approved. Cells marked A refuse to run without approval.
+# session guard (same three lines in every cell): restores cells 2 to 5 by itself if the kernel was restarted
+_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 3)
+
+# ---- EDIT ONLY THIS BLOCK: set an item to True when you (and your supervisor, where required) approve it. ----------
+A1_APPROVED = {
+    "A1.1": False,   # additional metrics (AUPRC, calibration intercept, threshold metrics, violation magnitude)
+    "A1.2": False,   # additional comparators (survival forest; LR, RF, XGBoost, LightGBM, SVM classifiers)
+    "A1.3": False,   # H1 (CKINN better than MLP) reported separately from C1
+    "A1.4": False,   # prior ablations (one prior added, one removed, lambda path)
+    "A1.5": False,   # extended extras E4 (LDL, alcohol)
+    "A1.6": False,   # event-count audit before the locked recalibration
+    "A1.7": False,   # two-year landmark and eligibility-aligned sensitivity
+    "A1.8": False,   # explainability analyses
+    "A1.9": False,   # clinical expert review (gated on real ratings)
+    "A1.10": False,  # subgroup audit
+    "A1.11": False,  # fairness-aware CKINN
+    "A1.12": False,  # population alignment
+    "A1.13": False,  # knowledge-graph CKINN
+    "A1.14": False,  # glycaemic strata and one-step progression
+    "A1.15": False,  # gated branches (readiness checks only)
+}
+# ---------------------------------------------------------------------------------------------------------------------
+
+A = Audit(3, "Settings freeze, deviations, amendment approvals")
+
+# 1. the whole settings block must equal the frozen fingerprint
+LOCKED_SETTINGS_SHA = "66d76d3adcc9a1e88c740f61153565d552dfdb2ebe14dd2bb1b03a2e837e672e"
+A.check("settings of cell 2 equal the frozen fingerprint (nothing was edited)", settings_fingerprint() == LOCKED_SETTINGS_SHA,
+        settings_fingerprint()[:16] + "...")
+
+# 2. each setting against the value written in the locked protocol (section; value; phrase in the protocol text)
+LOCKED = [
+    ("6", "horizon 3 years", H == 3.0, "Risk at horizon h = 3 years"),
+    ("4", "tier T1 = age, sex, BMI, SBP, DBP", TIERS["T1"] == ["age", "sex_male", "bmi", "sbp", "dbp"], "| T1 | age, sex, BMI, SBP, DBP |"),
+    ("4", "tier T2 = T1 + TC, TG, ALT", TIERS["T2"] == TIERS["T1"] + ["tc", "tg", "alt"], "| T2 | T1 + total cholesterol, triglycerides, ALT |"),
+    ("4", "tier T3 = T2 + FPG", TIERS["T3"] == TIERS["T2"] + ["fpg"], "| T3 | T2 + FPG |"),
+    ("4", "tier T4 = T3 + HDL, AST", TIERS["T4"] == TIERS["T3"] + ["hdl", "ast"], "| T4 | T3 + HDL, AST (RICH: heavy missingness) |"),
+    ("11", "headline tier T2", HEADLINE_TIER == "T2", "Pre-specified decision rules (headline tier T2)"),
+    ("6", "Cox ridge penalty 0.01", HP["cox_ridge"] == 0.01, "Cox regression, ridge penalty 0.01"),
+    ("6", "hidden layers (64, 64)", HP["hidden"] == (64, 64), "hidden layers (64, 64)"),
+    ("6", "AdamW learning rate 2e-3", HP["lr"] == 2e-3, "AdamW, learning rate 2e-3"),
+    ("6", "weight decay 1e-4", HP["weight_decay"] == 1e-4, "weight decay 1e-4"),
+    ("6", "dropout 0.1", HP["dropout"] == 0.1, "dropout 0.1"),
+    ("6", "batch 8192", HP["batch"] == 8192, "batch 8192"),
+    ("6", "up to 40 epochs", HP["epochs"] == 40, "up to 40 epochs"),
+    ("6", "early-stopping patience 4", HP["patience"] == 4, "early stopping (patience 4)"),
+    ("6", "10% validation split", HP["val_frac"] == 0.10, "on a 10% validation split"),
+    ("6", "lambda grid {0, 0.1, 1, 10}", HP["lambda_grid"] == (0.0, 0.1, 1.0, 10.0), "fit lambda in {0, 0.1, 1, 10}"),
+    ("6", "lambda tolerance 0.002", HP["lambda_tol"] == 0.002, "within 0.002 of the best value"),
+    ("6", "lambda fallback 0.1", HP["lambda_fallback"] == 0.1, "if none qualifies, lambda = 0.1"),
+    ("6", "inner 80/20 split", HP["inner_frac"] == 0.20, "inner 80/20 split, fixed seed"),
+    ("8", "5-fold CV, 3 repeats", (EVAL["cv_folds"], EVAL["cv_repeats"]) == (5, 3), "repeated stratified 5-fold CV in RICH, 3 repeats"),
+    ("8", "sites 0 and 16 never tested", SMALL_SITES == (0, 16), "sites 0 and 16 are pooled into training and never tested"),
+    ("8", "recalibration on 1,000 target participants", EVAL["recal_n"] == 1000, "recalibration on a random 1,000 target participants"),
+    ("9", "bootstrap 200 resamples", EVAL["boot_n"] == 200, "paired bootstrap, 200 resamples"),
+    ("9", "bootstrap subsample at most 40,000", EVAL["boot_max_n"] == 40000, "at most 40,000 target participants"),
+    ("9", "violation check +0.25 SD on 5,000", (EVAL["viol_delta_sd"], EVAL["viol_n"]) == (0.25, 5000), "finite differences, +0.25 SD, 5,000 test patients"),
+    ("9", "net benefit at 1% to 10%", EVAL["net_benefit_thresholds"] == [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1], "net benefit at 1% to 10% thresholds"),
+    ("9", "age bands under 40, 40 to 54, 55 and over", [(b[0], b[1]) for b in AGE_BANDS] == [(0, 40), (40, 55), (55, 200)], "age band (under 40, 40 to 54, 55 and over)"),
+    ("11", "C1 non-inferiority margin 0.01", EVAL["c1_margin"] == 0.01, "exceeds -0.01"),
+    ("12", "seed 0", SEED == 0, "CV seed = repeat index; model seed = 1000 x repeat + fold (other analyses: seed 0)"),
+    ("7", "priors up: BMI, FPG, TG, SBP, age, family history, HbA1c", all(PRIORS[v] == +1 for v in ("bmi", "fpg", "tg", "sbp", "age", "famhx", "hba1c")), "| BMI | up | both |"),
+    ("7", "priors down: HDL, exercise", all(PRIORS[v] == -1 for v in ("hdl", "exercise")), "| HDL | down | both (T4) |"),
+    ("7", "exactly nine priors; sex, ALT, AST, cholesterol, DBP unconstrained", len(PRIORS) == 9 and not {"sex_male", "alt", "ast", "tc", "dbp"} & set(PRIORS), "Sex, ALT, AST, cholesterol, DBP, waist, fatty liver, GGT, smoking are unconstrained"),
+]
+for sec, name, ok, phrase in LOCKED:
+    A.check(f"section {sec:>2}: {name}", ok)
+
+# 3. optional: if the protocol document itself is in this folder, check its hash and that every phrase above is in it
+_pfile = next((p for p in (WORK / "protocol_v1.0_LOCKED.md", WORK / "protocol" / "protocol_v1.0_LOCKED.md",
+                           WORK.parent / "protocol" / "protocol_v1.0_LOCKED.md") if p.exists()), None)
+if _pfile is None:
+    print("\n  Protocol document not in this folder: settings are verified by value and by fingerprint (enough to proceed).")
+else:
+    _ptext = _pfile.read_text(encoding="utf-8")
+    A.check("protocol document has the locked SHA-256", sha256_file(_pfile) == PROTOCOL_SHA, _pfile.name)
+    A.check("every locked value above is stated in the protocol document", all(ph in _ptext for *_x, ph in LOCKED),
+            [n for _s, n, _o, ph in LOCKED if ph not in _ptext])
+
+# 4. deviations logged so far (date; rule; effect on the claims)
+DEVIATIONS = [
+    ("D-1", "2026-11-11", "RICH site 14 has under 3 years of follow-up: it stays in training and is never a test site (12 test sites, not 13).", "none"),
+    ("D-2", "2026-11-11", "Main analyses use every row (training-fold median plus missingness indicators); complete cases only in sensitivity analysis S2.", "none"),
+    ("D-3", "2026-11-11", "Exact zeros in triglycerides, HDL, ALT and AST are treated as not measured and set to missing; no row is removed.", "none on the rules"),
+    ("D-4", "2026-11-11", "Exploratory analyses requested by the proposal were added; replaced by amendment A1 (see D-5).", "none"),
+    ("D-5", "2026-11-11", "Amendment A1: fifteen exploratory items, each proposed and effective only when approved below.", "none"),
+    ("D-6", "2026-11-12", "Software on the tablet: the study runs in Carnets Plus on an iPad, where XGBoost and PyTorch cannot be installed. The boosted "
+                          "Cox models and the networks are fitted with NumPy code of the same algorithms and locked settings (boosting: 300 trees, depth 3, "
+                          "rate 0.05, L2 penalty 1, minimum child weight 20, no random subsampling). Logged before any model result existed.", "none on the rules"),
+]
+print("\n  Deviations on file:")
+for d_id, d_date, d_text, d_effect in DEVIATIONS:
+    print(f"   {d_id}  {d_date}  {d_text}  Effect on C1 to C4: {d_effect}.")
+A.check("deviations D-1 to D-6 are listed", [d[0] for d in DEVIATIONS] == [f"D-{i}" for i in range(1, 7)])
+A.check("deviation D-1 is implemented in the settings (site 14 never tested)", NO_TEST_SITES == (14,))
+
+# 5. amendment A1: items and approvals
+A1_ITEMS = {
+    "A1.1": "Additional metrics", "A1.2": "Additional comparators", "A1.3": "H1 reported separately from C1",
+    "A1.4": "Prior ablations", "A1.5": "Extended extras E4", "A1.6": "Recalibration audit",
+    "A1.7": "Cohort-comparability sensitivity", "A1.8": "Explainability", "A1.9": "Clinical expert review (gated)",
+    "A1.10": "Subgroup audit", "A1.11": "Fairness-aware CKINN", "A1.12": "Population alignment",
+    "A1.13": "Knowledge-graph CKINN", "A1.14": "Glycaemic strata and progression", "A1.15": "Gated branches"}
+A1_SHA = sha256_text(json.dumps(A1_ITEMS, sort_keys=True))
+A.check("the approval block names exactly items A1.1 to A1.15", set(A1_APPROVED) == set(A1_ITEMS), len(A1_APPROVED))
+A.check("approval values are True or False", all(isinstance(v, bool) for v in A1_APPROVED.values()))
+
+APPROVAL_FILE = DIR["audit"] / "amendment_A1_approvals.json"
+_old = read_json(APPROVAL_FILE) if APPROVAL_FILE.exists() else {"items": {}}
+APPROVALS = {"amendment_sha": A1_SHA, "updated": now(), "items": {}}
+for item, title in A1_ITEMS.items():
+    prev = _old["items"].get(item, {})
+    ok = bool(A1_APPROVED.get(item, False))
+    keep_date = ok and prev.get("approved") and prev.get("amendment_sha") == A1_SHA
+    APPROVALS["items"][item] = {"title": title, "approved": ok,
+                                "approved_on": prev.get("approved_on") if keep_date else (now() if ok else None),
+                                "amendment_sha": A1_SHA if ok else None}
+write_json(APPROVAL_FILE, APPROVALS)
+
+
+def require_approval(item):
+    """Called by every cell marked A. Stops unless the item is approved in cell 3."""
+    rec = read_json(APPROVAL_FILE)["items"].get(item)
+    if not rec or not rec["approved"] or rec["amendment_sha"] != A1_SHA:
+        raise PermissionError(f"{item} is not approved. It is exploratory (amendment A1). Set it to True in cell 3, "
+                              f"re-run cell 3, then re-run this cell.")
+    return True
+
+
+print("\n  Amendment A1 (exploratory; none of these can enter a C1 to C4 verdict):")
+print(pd.DataFrame([{"item": k, "approved": v["approved"], "approved on": v["approved_on"] or "", "title": v["title"]}
+                    for k, v in APPROVALS["items"].items()]).to_string(index=False))
+_ = A.close(outputs={"settings_sha": LOCKED_SETTINGS_SHA, "deviations": [d[0] for d in DEVIATIONS], "amendment_sha": A1_SHA,
+                     "approved_items": [k for k, v in A1_APPROVED.items() if v]})
+keep_for_session(3)
