@@ -3,9 +3,11 @@
 # Why: Cox regression is the counterpart of logistic regression for censored follow-up, and the first comparator of
 # claim C1. This cell defines the model, checks it against lifelines on toy data, then fits it once to one fold of
 # RICH (tier T1) as a smoke test. That fold is unit (repeat 0, fold 0) of the internal validation run in stage G.
-# session guard (same three lines in every cell): restores the earlier set-up cells by itself if the kernel was restarted
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 30)
 require_gate("D")
 A = Audit(30, "Cox regression (ridge 0.01)")
@@ -97,252 +99,196 @@ if not restoring():
             _mt["cindex"] > 0.7 and _mt["scaled_brier"] > 0, round(_mt["cindex"], 4))
     A.check("a linear model with positive coefficients violates no prior (rate exactly 0)", _mt["viol_rate"] == 0.0)
     A.check("mean predicted 3-year risk is within a factor of 1.5 of the observed risk", 1 / 1.5 < _mt["oe"] < 1.5, round(_mt["oe"], 3))
-_ = A.close(outputs={"model": "Cox", "penalizer": HP["cox_ridge"], "reference": "lifelines 0.30.3 (toy data)"})
+    # the same model fitted by lifelines on the same prepared columns of the real fold (implementation check)
+    from lifelines import CoxPHFitter
+    _Zs = pd.DataFrame(_fit.model.prep.transform(SMOKE_TRAIN), columns=_fit.model.prep.names)
+    _Zs["T"], _Zs["E"] = SMOKE_TRAIN["time_y"].to_numpy(), SMOKE_TRAIN["event"].to_numpy()
+    _ll = CoxPHFitter(penalizer=HP["cox_ridge"]).fit(_Zs, "T", "E").params_.reindex(_fit.model.prep.names).to_numpy()
+    A.check("live: lifelines fitted to the same RICH fold gives the same coefficients (4 decimals)", np.allclose(_fit.model.beta, _ll, atol=1e-4),
+            float(np.abs(_fit.model.beta - _ll).max()))
+_ = A.close(outputs={"model": "Cox", "penalizer": HP["cox_ridge"], "reference": "lifelines 0.30.3 (toy data, stored) and installed lifelines (live)"})
 keep_for_session(30)
 
 # %%
-# CELL 31 - baselines 2 and 3: gradient-boosted Cox, without and with monotone constraints         [status L, D; protocol sections 6, 7; deviation D-6]
-# Why: boosted trees are the strongest conventional comparator (XGB), and the constrained version (XGB-mono) is the
-# conventional way of imposing the clinical priors: CKINN must be compared with it. XGBoost cannot be installed on this
-# tablet, so the same algorithm is written here in NumPy (deviation D-6). On toy data without tied times it reproduces
-# the predictions of XGBoost 3.4.1 to six decimals; with tied times it uses the exact Breslow gradient.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# CELL 31 - baselines 2 and 3: gradient-boosted Cox (XGBoost), without and with monotone constraints     [status L; protocol sections 5-7]
+# Why: boosted trees are the strongest conventional comparator (XGB), and the constrained version (XGB-mono) imposes the
+# clinical priors as hard monotone constraints, the conventional way of doing so: CKINN has to be compared with it.
+# Settings are those of the locked reference code: 300 trees, depth 3, learning rate 0.05, row and column subsampling
+# 0.8, minimum child weight 20, histogram method, seed = model seed, one thread. Missing values are handled by XGBoost
+# itself (protocol section 5). This cell tests the models on toy data, then fits both once to the RICH smoke fold.
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 31)
-A = Audit(31, "Gradient-boosted Cox, with and without monotone constraints", status="L, D")
-
-BOOST = {"lam": 1.0, "min_child_weight": 20.0, "max_bin": 4096}       # fixed settings (D-6); trees, depth and learning rate are in HP
-
-
-class HistGBM:
-    """Gradient-boosted regression trees in NumPy, after the 'hist' algorithm of XGBoost: Newton boosting, L2 penalty
-    `lam` on leaf values, a minimum Hessian sum per leaf, missing values sent to whichever side gains more, and optional
-    monotone constraints. Every distinct value is its own bin (up to max_bin), so split search is exact. No random
-    subsampling: the result is identical on every machine.
-    objective 'cox': y = (time, event), Cox partial likelihood with Breslow ties. objective 'logistic': y in {0, 1}."""
-
-    def __init__(self, objective="cox", n_trees=300, depth=3, eta=0.05, lam=1.0, min_child_weight=1.0, max_bin=4096, monotone=None):
-        self.objective, self.n_trees, self.depth, self.eta, self.lam = objective, n_trees, depth, eta, lam
-        self.mcw, self.max_bin, self.monotone = min_child_weight, max_bin, monotone
-
-    def _bin(self, X):
-        B = np.empty(X.shape, dtype=np.int32, order="F")
-        for j, cuts in enumerate(self.cuts):
-            x = X[:, j]
-            b = np.clip(np.searchsorted(cuts, x, side="right") - 1, 0, len(cuts) - 1)       # bin k holds cuts[k] <= x < cuts[k+1]
-            B[:, j] = np.where(np.isnan(x), len(cuts), b)                                   # the last bin index means missing
-        return B
-
-    def fit(self, X, time=None, event=None, y=None, weight=None):
-        X = np.asarray(X, dtype=float)
-        n, p = X.shape
-        self.cuts = []
-        for j in range(p):
-            v = X[~np.isnan(X[:, j]), j]
-            u = np.unique(v)
-            self.cuts.append(u if len(u) <= self.max_bin else np.unique(np.quantile(v, np.linspace(0, 1, self.max_bin + 1)[:-1])))
-        B = self._bin(X)
-        nb = [len(c) + 1 for c in self.cuts]
-        mono = np.zeros(p) if self.monotone is None else np.asarray(self.monotone, dtype=float)
-        if self.objective == "cox":
-            o = np.argsort(time, kind="stable")                      # ascending time
-            B, delta = np.asfortranarray(B[o]), np.asarray(event, dtype=float)[o]
-            _ut, starts, inv = np.unique(np.asarray(time, dtype=float)[o], return_index=True, return_inverse=True)
-            d_at = np.add.reduceat(delta, starts)
-            f = np.zeros(n)
-        else:
-            y = np.asarray(y, dtype=float)
-            w = np.ones(n) if weight is None else np.asarray(weight, dtype=float)
-            self.base = float(np.log((w * y).sum() / (w * (1 - y)).sum()))
-            f = np.full(n, self.base)
-        self.trees = []
-        for _k in range(self.n_trees):
-            if self.objective == "cox":                              # gradient and Hessian of the negative partial log-likelihood
-                r = np.exp(f - f.max())
-                s0 = np.cumsum(r[::-1])[::-1][starts]                # risk-set sum at each distinct time
-                ra = r * np.cumsum(d_at / s0)[inv]
-                g, h = ra - delta, ra - r * r * np.cumsum(d_at / s0 ** 2)[inv]
-            else:
-                pr = 1.0 / (1.0 + np.exp(-f))
-                g, h = w * (pr - y), w * pr * (1.0 - pr)
-            tree = self._grow(B, g, h, nb, mono)
-            f = f + self.eta * self._apply(tree, B)
-            self.trees.append(tree)
-        return self
-
-    def _weight(self, G, Hs, lo, hi):
-        return np.clip(-G / (Hs + self.lam), lo, hi)
-
-    def _grow(self, B, g, h, nb, mono):
-        n_nodes = 2 ** (self.depth + 1) - 1                          # complete binary tree; node k has children 2k+1 and 2k+2
-        feat, thr, miss_left = np.full(n_nodes, -1), np.zeros(n_nodes, dtype=int), np.zeros(n_nodes, dtype=bool)
-        value, leaf = np.zeros(n_nodes), np.ones(n_nodes, dtype=bool)
-        lo, hi = np.full(n_nodes, -np.inf), np.full(n_nodes, np.inf)
-        rows = {0: np.arange(len(g))}
-        for k in range(n_nodes):
-            if k not in rows:
-                continue
-            idx = rows.pop(k)
-            gi, hi_ = g[idx], h[idx]
-            G, Hs = gi.sum(), hi_.sum()
-            value[k] = self._weight(G, Hs, lo[k], hi[k])
-            if 2 * k + 2 >= n_nodes or len(idx) < 2:
-                continue
-            base = -(2 * G * value[k] + (Hs + self.lam) * value[k] ** 2)
-            best_gain, best = 1e-6, None
-            for j in range(B.shape[1]):
-                if nb[j] < 3:
-                    continue
-                b = B[idx, j]
-                gh, hh = np.bincount(b, weights=gi, minlength=nb[j]), np.bincount(b, weights=hi_, minlength=nb[j])
-                gm, hm = gh[-1], hh[-1]                              # sums over rows with a missing value
-                cg, ch = np.cumsum(gh[:-2]), np.cumsum(hh[:-2])      # left sums for 'bin <= c'
-                for left_missing in ((False, True) if hm > 0 else (False,)):
-                    GL, HL = (cg + gm, ch + hm) if left_missing else (cg, ch)
-                    GR, HR = G - GL, Hs - HL
-                    wl, wr = self._weight(GL, HL, lo[k], hi[k]), self._weight(GR, HR, lo[k], hi[k])
-                    gain = -(2 * GL * wl + (HL + self.lam) * wl ** 2) - (2 * GR * wr + (HR + self.lam) * wr ** 2) - base
-                    ok = (HL >= self.mcw) & (HR >= self.mcw)
-                    if mono[j] > 0:
-                        ok &= wl <= wr
-                    if mono[j] < 0:
-                        ok &= wl >= wr
-                    gain = np.where(ok, gain, -np.inf)
-                    # among equal gains (empty bins in between): lowest threshold if missing goes right, highest if left (as XGBoost)
-                    c = int(len(gain) - 1 - np.argmax(gain[::-1])) if left_missing else int(np.argmax(gain))
-                    if gain[c] > best_gain * (1 + 1e-9) + 1e-12:     # an exact tie keeps the earlier feature
-                        best_gain, best = gain[c], (j, c, left_missing, wl[c], wr[c])
-            if best is None:
-                continue
-            j, c, left_missing, wl, wr = best
-            feat[k], thr[k], miss_left[k], leaf[k] = j, c, left_missing, False
-            b = B[idx, j]
-            go_left = np.where(b == nb[j] - 1, left_missing, b <= c)
-            L, R = 2 * k + 1, 2 * k + 2
-            rows[L], rows[R] = idx[go_left], idx[~go_left]
-            lo[L], hi[L], lo[R], hi[R] = lo[k], hi[k], lo[k], hi[k]
-            mid = (wl + wr) / 2
-            if mono[j] > 0:
-                hi[L], lo[R] = mid, mid
-            if mono[j] < 0:
-                lo[L], hi[R] = mid, mid
-        return {"feat": feat, "thr": thr, "miss_left": miss_left, "value": value, "leaf": leaf, "nb": np.asarray(nb)}
-
-    def _apply(self, tree, B):
-        node, row = np.zeros(B.shape[0], dtype=np.int64), np.arange(B.shape[0])
-        for _level in range(self.depth):
-            inner = ~tree["leaf"][node]
-            fj = np.where(inner, tree["feat"][node], 0)
-            b = B[row, fj]
-            go_left = np.where(b == tree["nb"][fj] - 1, tree["miss_left"][node], b <= tree["thr"][node])
-            node = np.where(inner, np.where(go_left, 2 * node + 1, 2 * node + 2), node)
-        return tree["value"][node]
-
-    def margin(self, X):
-        B = self._bin(np.asarray(X, dtype=float))
-        f = np.zeros(B.shape[0]) + (self.base if self.objective == "logistic" else 0.0)
-        for tree in self.trees:
-            f += self.eta * self._apply(tree, B)
-        return f
+A = Audit(31, "Gradient-boosted Cox (XGBoost), with and without monotone constraints")
+import xgboost as xgb
 
 
 class BoostedCox:
-    """Protocol section 6, models 2 (XGB) and 3 (XGB-mono). Missing values are handled natively (section 5). With
-    monotone=True the priors of section 7 that apply to the predictors become hard monotone constraints."""
+    """Protocol section 6, models 2 (XGB) and 3 (XGB-mono). lp() is XGBoost's margin, the log relative hazard. With
+    monotone=True every predictor that has a prior (section 7) gets a hard monotone constraint in its direction."""
 
-    def __init__(self, cols, monotone=False):
-        self.cols, self.monotone = list(cols), monotone
+    def __init__(self, cols, monotone=False, seed=0, priors=None):
+        self.cols, self.monotone, self.seed = list(cols), monotone, seed
+        self.priors = PRIORS if priors is None else priors
+
+    def _X(self, df):
+        return df[self.cols].to_numpy(np.float32)                    # NaN is passed through: XGBoost learns where it goes
+
+    def params(self):
+        p = {"objective": "survival:cox", "eval_metric": "cox-nloglik", "eta": HP["xgb_eta"], "max_depth": HP["xgb_depth"],
+             "subsample": HP["xgb_subsample"], "colsample_bytree": HP["xgb_colsample"], "min_child_weight": HP["xgb_min_child_weight"],
+             "tree_method": HP["xgb_tree_method"], "seed": self.seed, "nthread": ENV["threads"]}
+        if self.monotone:
+            p["monotone_constraints"] = "(" + ",".join(str(self.priors.get(c, 0)) for c in self.cols) + ")"
+        return p
 
     def fit(self, df):
-        mono = [PRIORS.get(c, 0) if self.monotone else 0 for c in self.cols]
-        self.gbm = HistGBM("cox", HP["xgb_trees"], HP["xgb_depth"], HP["xgb_eta"], BOOST["lam"], BOOST["min_child_weight"], BOOST["max_bin"], mono)
-        self.gbm.fit(df[self.cols].to_numpy(dtype=float), df["time_y"].to_numpy(), df["event"].to_numpy())
+        y = np.where(df["event"].to_numpy() == 1, df["time_y"].to_numpy(), -df["time_y"].to_numpy())   # XGBoost Cox label: negative = censored
+        self.bst = xgb.train(self.params(), xgb.DMatrix(self._X(df), label=y), num_boost_round=HP["xgb_trees"])
         return self
 
     def lp(self, df):
-        return self.gbm.margin(df[self.cols].to_numpy(dtype=float))
+        return self.bst.predict(xgb.DMatrix(self._X(df)), output_margin=True).astype(np.float64)
 
 
-MODELS["XGB"] = lambda cols, seed=0: BoostedCox(cols, monotone=False)
-MODELS["XGB-mono"] = lambda cols, seed=0: BoostedCox(cols, monotone=True)
+MODELS["XGB"] = lambda cols, seed=0: BoostedCox(cols, monotone=False, seed=seed)
+MODELS["XGB-mono"] = lambda cols, seed=0: BoostedCox(cols, monotone=True, seed=seed)
 
-A.check("deviation D-6 (software on the tablet) is on the register of cell 3", any(d[0] == "D-6" for d in DEVIATIONS),
-        "if this fails: replace cell 3 with its new version and run it")
-A.check("boosting settings equal the locked ones: 300 trees, depth 3, learning rate 0.05", (HP["xgb_trees"], HP["xgb_depth"], HP["xgb_eta"]) == (300, 3, 0.05))
+A.check(f"XGBoost {xgb.__version__} is in use, with the locked settings: 300 trees, depth 3, rate 0.05, subsampling 0.8 and 0.8, minimum child weight 20",
+        (HP["xgb_trees"], HP["xgb_depth"], HP["xgb_eta"], HP["xgb_subsample"], HP["xgb_colsample"], HP["xgb_min_child_weight"]) == (300, 3, 0.05, 0.8, 0.8, 20))
 
-# ---------------------------------------------------------------- tests on toy arrays, against XGBoost 3.4.1 (tree_method hist, lambda 1, min_child_weight 1)
-_d = toy_survival(250, ties=False)
+# ---------------------------------------------------------------- tests on toy arrays
+_d = toy_survival(6000)                                              # boosted trees need a few thousand rows to beat noise on these toy data
 _d.loc[::9, "x2"] = np.nan                                           # missing values in one predictor
-_tr, _te = _d.iloc[:166], _d.iloc[166:]
-_X, _Xt, _t, _e = _tr[["x1", "x2"]].to_numpy(), _te[["x1", "x2"]].to_numpy(), _tr["time_y"].to_numpy(), _tr["event"].to_numpy()
-_m300 = HistGBM("cox", 300, 3, 0.05).fit(_X, _t, _e).margin(_Xt)
-A.check("boosted Cox, 300 trees, toy data with missing values: equal to XGBoost on unseen rows to 5 decimals",
-        np.allclose(_m300[:5], [-0.4353852, 0.7293296, -0.2031798, -0.9950941, 1.6108009], atol=1e-5) and abs(_m300.sum() - 4.609698) < 1e-4, np.round(_m300[:3], 6).tolist())
-_gm = HistGBM("cox", 20, 3, 0.05, monotone=(1, -1)).fit(_X, _t, _e)
-_m20 = _gm.margin(_Xt)
-A.check("monotone boosted Cox, 20 trees: equal to XGBoost with monotone_constraints (1, -1) to 6 decimals",
-        np.allclose(_m20[:5], [0.1433601, -0.0044428, -0.0167303, -0.1436132, 0.1890372], atol=1e-6) and abs(_m20.sum() + 1.384737) < 1e-5)
-_y, _w = (_tr["time_y"] <= 3).astype(int).to_numpy(), 1 + (np.arange(len(_tr)) % 3) * 0.5
-_ml = HistGBM("logistic", 300, 3, 0.05).fit(_X, y=_y, weight=_w).margin(_Xt)
-A.check("boosted logistic model with weights, 300 trees: equal to XGBoost to 5 decimals",
-        np.allclose(_ml[:5], [0.4211563, 1.8292954, -0.4477710, 2.1648521, 2.6879263], atol=1e-5) and abs(_ml.sum() - 91.229327) < 1e-4)
+_tr, _te = _d.iloc[:4000], _d.iloc[4000:]
+_pri = {"x1": +1, "x2": -1}
+_mono = BoostedCox(["x1", "x2"], monotone=True, seed=0, priors=_pri).fit(_tr)
+_free = BoostedCox(["x1", "x2"], monotone=False, seed=0, priors=_pri).fit(_tr)
+A.check("the constraint string follows the priors: '(1,-1)' for x1 up and x2 down; none without monotone", _mono.params()["monotone_constraints"] == "(1,-1)"
+        and "monotone_constraints" not in _free.params())
 _grid = np.linspace(-1, 1, 81)
-_mm = HistGBM("cox", 300, 3, 0.05, monotone=(1, -1)).fit(_X, _t, _e)
-_up = np.array([_mm.margin(np.column_stack([_grid, np.full(81, c)])) for c in (-0.5, 0.0, 0.5, np.nan)])
-_dn = np.array([_mm.margin(np.column_stack([np.full(81, c), _grid])) for c in (-0.5, 0.0, 0.5)])
+_up = np.array([_mono.lp(pd.DataFrame({"x1": _grid, "x2": np.full(81, c)})) for c in (-0.5, 0.0, 0.5, np.nan)])
+_dn = np.array([_mono.lp(pd.DataFrame({"x1": np.full(81, c), "x2": _grid})) for c in (-0.5, 0.0, 0.5)])
 A.check("monotone constraints hold everywhere on a grid: the log hazard never falls as x1 rises and never rises as x2 rises",
         (np.diff(_up, axis=1) >= 0).all() and (np.diff(_dn, axis=1) <= 0).all())
-_free = HistGBM("cox", 300, 3, 0.05).fit(_X, _t, _e)
 A.check("without constraints the same data give a non-monotone fit (so the constraint is doing something)",
-        (np.diff(_free.margin(np.column_stack([_grid, np.zeros(81)]))) < 0).any())
-A.check("the fit is deterministic: fitting twice gives identical predictions", np.array_equal(HistGBM("cox", 50, 3, 0.05).fit(_X, _t, _e).margin(_Xt), HistGBM("cox", 50, 3, 0.05).fit(_X, _t, _e).margin(_Xt)))
-A.check("a missing value is accepted at prediction time and gives a finite log hazard", np.isfinite(_free.margin(np.array([[0.2, np.nan], [np.nan, np.nan]]))).all())
-_tt = toy_survival(250)                                              # tied times: structural checks only (XGBoost approximates the tie gradient)
-_ft = fit_with_baseline(BoostedCox(["x1", "x2"]), _tt.iloc[:166])
-A.check("with tied times the model still fits, gives risks in (0, 1) and ranks unseen rows better than chance",
-        ((_ft.risk(_tt.iloc[166:]) > 0) & (_ft.risk(_tt.iloc[166:]) < 1)).all() and concordance_index(_tt.iloc[166:]["time_y"], _ft.model.lp(_tt.iloc[166:]), _tt.iloc[166:]["event"]) > 0.5)
+        (np.diff(_free.lp(pd.DataFrame({"x1": _grid, "x2": np.zeros(81)}))) < 0).any() or (np.diff(_free.lp(pd.DataFrame({"x1": np.zeros(81), "x2": _grid}))) > 0).any())
+A.check("the same seed gives identical predictions; another seed gives different ones (row and column subsampling)",
+        np.array_equal(BoostedCox(["x1", "x2"], seed=0).fit(_tr).lp(_te), _free.lp(_te)) and not np.array_equal(BoostedCox(["x1", "x2"], seed=1).fit(_tr).lp(_te), _free.lp(_te)))
+A.check("a missing value is accepted at prediction time and gives a finite log hazard", np.isfinite(_free.lp(pd.DataFrame({"x1": [0.2, np.nan], "x2": [np.nan, np.nan]}))).all())
+_ft = fit_with_baseline(BoostedCox(["x1", "x2"]), _tr)
+A.check("risks lie strictly between 0 and 1 and the model ranks unseen toy rows better than chance",
+        ((_ft.risk(_te) > 0) & (_ft.risk(_te) < 1)).all() and concordance_index(_te["time_y"], _ft.model.lp(_te), _te["event"]) > 0.55,
+        round(concordance_index(_te["time_y"], _ft.model.lp(_te), _te["event"]), 3))
+A.check("the constrained toy model violates neither prior (violation rate exactly 0)", violation_rate(_mono, _te, priors=_pri)[0] == 0.0)
 
 # ---------------------------------------------------------------- smoke test on the RICH fold, tier T2 (skipped while a session is being restored)
 if not restoring():
     _cols, _rows = predictors("RICH", "T2"), []
     for _name in ("XGB", "XGB-mono"):
         _t0 = time.time()
-        _fit = fit_model(_name, _cols, SMOKE_TRAIN)
+        _fit = fit_model(_name, _cols, SMOKE_TRAIN, seed=0)
         _mt = evaluate(_fit, SMOKE_TEST)
         _rows.append({"model": _name, "seconds": round(time.time() - _t0), **{k: _mt[k] for k in ("events", "cindex", "auc_3y", "scaled_brier", "oe", "cal_slope", "viol_rate")}})
         A.check(f"{_name}: risks strictly between 0 and 1; C-index over 0.7; Brier score beats the uninformative prediction",
                 ((_fit.risk(SMOKE_TEST) > 0) & (_fit.risk(SMOKE_TEST) < 1)).all() and _mt["cindex"] > 0.7 and _mt["scaled_brier"] > 0, round(_mt["cindex"], 4))
         if _name == "XGB-mono":
-            A.check("XGB-mono: constraints on age, BMI, SBP and triglycerides; its violation rate is exactly 0",
-                    [PRIORS.get(c, 0) for c in _cols] == [1, 0, 1, 1, 0, 0, 1, 0] and _mt["viol_rate"] == 0.0)
+            A.check("XGB-mono: constraints on age, BMI, SBP and triglycerides only; its violation rate is exactly 0",
+                    _fit.model.params()["monotone_constraints"] == "(1,0,1,1,0,0,1,0)" and _mt["viol_rate"] == 0.0)
     print("\n  RICH tier T2, fold (repeat 0, fold 0); one fold only, the full internal validation is stage G:")
     print(pd.DataFrame(_rows).round(4).to_string(index=False))
-    print(f"\n  Time per fit here: about {int(np.mean([r['seconds'] for r in _rows]))} s. Stage G fits these two models 120 times (60 folds), in resumable units.")
-_ = A.close(outputs={"models": ["XGB", "XGB-mono"], "settings": {**BOOST, "trees": HP["xgb_trees"], "depth": HP["xgb_depth"], "eta": HP["xgb_eta"]},
-                     "reference": "XGBoost 3.4.1 (toy data)"})
+_ = A.close(outputs={"models": ["XGB", "XGB-mono"], "xgboost": xgb.__version__,
+                     "settings": {k: HP[k] for k in ("xgb_trees", "xgb_depth", "xgb_eta", "xgb_subsample", "xgb_colsample", "xgb_min_child_weight", "xgb_tree_method")}})
 keep_for_session(31)
 
 # %%
-# CELL 32 - random survival forest                                                              [status A: amendment item A1.2; proposal p. 17]
-# Why: the proposal names random forest. Its survival version needs the scikit-survival package, which cannot be
-# installed on this tablet. The cell reports that honestly; the random-forest family is represented in cell 34 by a
-# forest classifier on the 3-year endpoint. Nothing is substituted for a model that cannot be run.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# CELL 32 - random survival forest (scikit-survival)                                            [status A: amendment item A1.2; proposal p. 17]
+# Why: the proposal names random forest; for censored follow-up its proper form is the random survival forest. Settings
+# (amendment A1.2): 200 trees, at least 50 participants per leaf, each tree grown on 20,000 participants drawn with
+# replacement; the other settings are scikit-survival's defaults. Missing values: training-fold median or mode plus
+# missingness indicators (cell 22). It is an exploratory comparator, not part of the "best baseline" of claim C1.
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 32)
 A = Audit(32, "Random survival forest", status="A")
-RSF_STATUS = "not approved"
-if not skip_unapproved(A, "A1.2", "the random survival forest"):
-    try:
-        import sksurv                                                 # noqa: F401
-        RSF_STATUS = "package present: this cell must be completed before use"
-    except Exception:
-        RSF_STATUS = "not run: scikit-survival is not installed on this machine"
-    print(f"  Random survival forest: {RSF_STATUS}.")
-    print("  It is recorded as 'not run on this machine' in the comparison tables. To include it, the notebook has to be")
-    print("  run once on a computer where scikit-survival can be installed.")
-    A.check("the status of the random survival forest is recorded, with no substitute model", RSF_STATUS.startswith(("not run", "package present")))
-_ = A.close(outputs={"rsf_status": RSF_STATUS})
+import sksurv
+from sksurv.ensemble import RandomSurvivalForest
+from sksurv.util import Surv
+
+RSF_SETTINGS = {"n_estimators": 200, "min_samples_leaf": 50, "max_samples": 20000, "bootstrap": True}
+
+
+class SurvivalForest:
+    """3-year risk from the forest's survival function at the training event times. lp() = log(-log(1 - risk)), used
+    for ranking and violation checks, as for the other direct-risk models."""
+
+    def __init__(self, cols, seed=0, n_estimators=None):
+        self.cols, self.seed = list(cols), seed
+        self.n_estimators = RSF_SETTINGS["n_estimators"] if n_estimators is None else n_estimators
+
+    def fit(self, df):
+        self.prep = Prep(self.cols).fit(df)
+        y = Surv.from_arrays(df["event"].astype(bool).to_numpy(), df["time_y"].to_numpy(dtype=float))
+        self.rsf = RandomSurvivalForest(n_estimators=self.n_estimators, min_samples_leaf=RSF_SETTINGS["min_samples_leaf"],
+                                        max_samples=min(RSF_SETTINGS["max_samples"], len(df)), bootstrap=True,
+                                        random_state=self.seed, n_jobs=ENV["threads"]).fit(self.prep.transform(df), y)
+        self.times_ = np.asarray(getattr(self.rsf, "unique_times_", getattr(self.rsf, "event_times_", None)))
+        return self
+
+    def survival_at(self, df, h=H, chunk=5000):
+        k = int(np.searchsorted(self.times_, h, side="right")) - 1
+        X = self.prep.transform(df)
+        if k < 0:
+            return np.ones(len(X))
+        key = (hashlib.sha256(X.tobytes()).hexdigest(), k)        # the forest is slow to predict: reuse the last few results
+        cache = self.__dict__.setdefault("_cache", {})
+        if key not in cache:
+            if len(cache) >= 4:
+                cache.pop(next(iter(cache)))
+            cache[key] = np.concatenate([self.rsf.predict_survival_function(X[i:i + chunk], return_array=True)[:, k] for i in range(0, len(X), chunk)])
+        return cache[key].copy()
+
+    def risk3(self, df):
+        return 1.0 - self.survival_at(df, H)
+
+    def lp(self, df):
+        return cloglog(self.risk3(df))
+
+
+MODELS["RSF"] = lambda cols, seed=0: SurvivalForest(cols, seed)
+RSF_STATUS = f"defined with scikit-survival {sksurv.__version__}"
+
+# ---------------------------------------------------------------- tests on toy arrays
+_d = toy_survival(600)
+_d.loc[::9, "x2"] = np.nan
+_tr, _te = _d.iloc[:400], _d.iloc[400:]
+_te = _te[_te["time_y"] < _tr["time_y"].max()]
+_f = fit_model("RSF", ["x1", "x2"], _tr, seed=0)
+_r = _f.risk(_te)
+A.check("toy forest: 200 trees, each on all 400 toy rows drawn with replacement (fewer than 20,000), risks between 0 and 1",
+        len(_f.model.rsf.estimators_) == 200 and ((_r >= 0) & (_r <= 1)).all())
+A.check("survival never increases with time: S(2) >= S(3) >= S(5) for every toy row",
+        (_f.model.survival_at(_te, 2.0) >= _f.model.survival_at(_te, 3.0) - 1e-12).all() and (_f.model.survival_at(_te, 3.0) >= _f.model.survival_at(_te, 5.0) - 1e-12).all())
+A.check("the forest ranks unseen toy rows better than chance (AUC over 0.55)", auc_at(_tr, _te, _f.model.lp(_te)) > 0.55, round(auc_at(_tr, _te, _f.model.lp(_te)), 3))
+A.check("the same seed gives the same forest", np.array_equal(fit_model("RSF", ["x1", "x2"], _tr, seed=0).risk(_te), _r))
+
+# ---------------------------------------------------------------- smoke test on the RICH fold, tier T2 (about 2 minutes)
+if not skip_unapproved(A, "A1.2", "the random survival forest") and not restoring():
+    _cols, _t0 = predictors("RICH", "T2"), time.time()
+    _fit = fit_model("RSF", _cols, SMOKE_TRAIN, seed=0)
+    _mt = evaluate(_fit, SMOKE_TEST)
+    print(f"\n  Random survival forest, RICH tier T2, fold (repeat 0, fold 0); exploratory comparator, one fold only ({time.time() - _t0:.0f} s):")
+    print(pd.Series({k: _mt[k] for k in ("n", "events", "cindex", "auc_3y", "scaled_brier", "oe", "cal_slope", "viol_rate")}).round(4).to_string())
+    A.check("RSF: risks between 0 and 1, C-index over 0.7, Brier score beats the uninformative prediction",
+            ((_fit.risk(SMOKE_TEST) >= 0) & (_fit.risk(SMOKE_TEST) <= 1)).all() and _mt["cindex"] > 0.7 and _mt["scaled_brier"] > 0, round(_mt["cindex"], 4))
+    RSF_STATUS = f"fitted with scikit-survival {sksurv.__version__}"
+_ = A.close(outputs={"rsf_status": RSF_STATUS, "settings": RSF_SETTINGS})
 keep_for_session(32)
 
 # %%
@@ -351,8 +297,11 @@ keep_for_session(32)
 # a participant who was censored before 3 years. A valid label is: event by 3 years = 1; followed beyond 3 years = 0;
 # censored earlier = unknown, weight 0, with the others weighted up by the inverse probability of remaining uncensored.
 # Nobody censored early is ever labelled a non-event. The function is defined and tested on toy arrays here.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 33)
 A = Audit(33, "Three-year classification endpoint", status="A")
 
@@ -392,19 +341,23 @@ keep_for_session(33)
 
 # %%
 # CELL 34 - classifiers on the 3-year endpoint: logistic regression, random forest, boosted trees   [status A: amendment item A1.2; proposal p. 17]
-# Why: the proposal's comparison list. On this tablet: logistic regression and random forest from scikit-learn; the
-# XGBoost-type model is the NumPy engine of cell 31 with a logistic loss; the LightGBM-type model is scikit-learn's
-# histogram gradient boosting (the same leaf-wise algorithm). Settings are fixed, not tuned. These models are exploratory
-# comparators: they are not part of the "best baseline" of claim C1.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# Why: the proposal's comparison list (p. 17): logistic regression and random forest (scikit-learn), XGBoost and
+# LightGBM classifiers. Settings are those of amendment A1.2, fixed, not tuned. XGBoost and LightGBM handle missing
+# values themselves; the other two use the training-fold fill of cell 22. These are exploratory comparators: they are
+# not part of the "best baseline" of claim C1.
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 34)
 A = Audit(34, "Weighted classifiers on the 3-year endpoint", status="A")
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
+from sklearn.ensemble import RandomForestClassifier
+import lightgbm as lgb
 
-CLASSIFIER_SETTINGS = {"LR": "L2, C = 1", "RF": "300 trees, minimum leaf 50", "GB-xgb": "300 trees, depth 3, rate 0.05, lambda 1, min child weight 20",
-                       "GB-lgbm": "300 trees, 8 leaves, rate 0.05"}
+CLASSIFIER_SETTINGS = {"LR": "L2, C = 1", "RF": "300 trees, minimum leaf 50", "XGB-clf": "XGBoost, 300 trees, depth 3, rate 0.05",
+                       "LGBM-clf": "LightGBM, 300 trees, 8 leaves, rate 0.05"}
 
 
 class WeightedClassifier:
@@ -415,7 +368,7 @@ class WeightedClassifier:
         self.cols, self.kind, self.seed = list(cols), kind, seed
 
     def _X(self, df):
-        return self.prep.transform(df) if self.kind in ("LR", "RF") else df[self.cols].to_numpy(dtype=float)
+        return self.prep.transform(df) if self.kind in ("LR", "RF") else df[self.cols].astype(float)    # XGBoost, LightGBM: NaN kept
 
     def fit(self, df):
         known, y, w = status_at_horizon(df)
@@ -427,18 +380,19 @@ class WeightedClassifier:
             self.clf = LogisticRegression(C=1.0, max_iter=2000).fit(X, y, sample_weight=w)
         elif self.kind == "RF":
             self.clf = RandomForestClassifier(n_estimators=300, min_samples_leaf=50, random_state=self.seed, n_jobs=1).fit(X, y, sample_weight=w)
-        elif self.kind == "GB-lgbm":
-            self.clf = HistGradientBoostingClassifier(max_iter=300, max_leaf_nodes=8, learning_rate=0.05, early_stopping=False, random_state=self.seed).fit(X, y, sample_weight=w)
-        elif self.kind == "GB-xgb":
-            self.clf = HistGBM("logistic", 300, 3, 0.05, BOOST["lam"], BOOST["min_child_weight"], BOOST["max_bin"]).fit(X, y=y, weight=w)
+        elif self.kind == "XGB-clf":
+            self.clf = xgb.XGBClassifier(n_estimators=300, max_depth=3, learning_rate=0.05, tree_method="hist", random_state=self.seed,
+                                         n_jobs=ENV["threads"]).fit(X, y, sample_weight=w)
+        elif self.kind == "LGBM-clf":
+            self.clf = lgb.LGBMClassifier(n_estimators=300, num_leaves=8, learning_rate=0.05, random_state=self.seed, n_jobs=ENV["threads"],
+                                          deterministic=True, force_row_wise=True, verbose=-1).fit(X, y, sample_weight=w)
         else:
             raise KeyError(self.kind)
         self.n_fit_, self.events_fit_ = int(known.sum()), int(y.sum())
         return self
 
     def risk3(self, df):
-        X = self._X(df)
-        return 1.0 / (1.0 + np.exp(-self.clf.margin(X))) if self.kind == "GB-xgb" else self.clf.predict_proba(X)[:, 1]
+        return self.clf.predict_proba(self._X(df))[:, 1]
 
     def lp(self, df):
         return cloglog(self.risk3(df))
@@ -469,7 +423,9 @@ try:
 except ValueError:
     _refused = True
 A.check("a classifier gives the risk by 3 years only; asking for another horizon raises an error", _refused)
-A.check("the same seed gives the same forest", np.array_equal(fit_model("RF", ["x1", "x2"], _tr, seed=3).risk(_te), fit_model("RF", ["x1", "x2"], _tr, seed=3).risk(_te)))
+A.check("the same seed gives the same forest, the same XGBoost and the same LightGBM model",
+        all(np.array_equal(fit_model(k, ["x1", "x2"], _tr, seed=3).risk(_te), fit_model(k, ["x1", "x2"], _tr, seed=3).risk(_te)) for k in ("RF", "XGB-clf", "LGBM-clf")))
+A.check(f"the libraries in use: XGBoost {xgb.__version__}, LightGBM {lgb.__version__}", True)
 
 # ---------------------------------------------------------------- smoke test on the RICH fold, tier T2
 if not skip_unapproved(A, "A1.2", "the classifier smoke test on the RICH fold") and not restoring():
@@ -491,8 +447,11 @@ keep_for_session(34)
 # feasible versions are used: a linear SVM, and a radial-kernel SVM through the Nystroem approximation (300 components).
 # An SVM gives a score, not a probability; the score is turned into a 3-year risk by weighted Platt scaling fitted on
 # an inner 20% of the training rows, never on test rows.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 35)
 A = Audit(35, "Support vector machines with Platt scaling", status="A")
 from sklearn.svm import LinearSVC
@@ -569,8 +528,11 @@ keep_for_session(35)
 # Why: a stop point before the network and CKINN. It confirms that every baseline is defined, tested and registered,
 # states which exploratory comparators are active, and confirms that no result file has been written yet: the smoke
 # tests of this stage printed one fold only and stored nothing.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 36)
 require_gate("D")
 A = Audit("gate_E", "Gate E: baseline models")
@@ -579,9 +541,9 @@ _recs = {c: load_record(c) for c in range(30, 36)}
 for c, r in _recs.items():
     A.check(f"cell {c} has a passed record made under the current settings", bool(r) and r["valid"], "missing" if not r else f"{len(r['checks'])} checks, {r['time']}")
 LOCKED_BASELINES = ["Cox", "XGB", "XGB-mono"]
-EXPLORATORY_COMPARATORS = ["LR", "RF", "GB-xgb", "GB-lgbm", "SVM-linear", "SVM-rbf"]
+EXPLORATORY_COMPARATORS = ["RSF", "LR", "RF", "XGB-clf", "LGBM-clf", "SVM-linear", "SVM-rbf"]
 A.check("the three locked baselines are registered", all(m in MODELS for m in LOCKED_BASELINES))
-A.check("the six exploratory comparators are defined; they enter an analysis only if A1.2 is approved", all(m in MODELS for m in EXPLORATORY_COMPARATORS))
+A.check("the seven exploratory comparators are defined; they enter an analysis only if A1.2 is approved", all(m in MODELS for m in EXPLORATORY_COMPARATORS))
 ACTIVE_MODELS = LOCKED_BASELINES + (EXPLORATORY_COMPARATORS if approved("A1.2") else [])
 _toy = toy_survival(300)
 for _m in LOCKED_BASELINES:
@@ -593,7 +555,7 @@ A.check("no result part or prediction file has been written yet", not any(p.suff
 print(f"\n  Locked baselines: {LOCKED_BASELINES}")
 print(f"  Exploratory comparators (amendment A1.2): {'ACTIVE' if approved('A1.2') else 'defined but not active, because A1.2 is not approved'}: {EXPLORATORY_COMPARATORS}")
 print(f"  Random survival forest: {RSF_STATUS}.")
-print("  Deviation D-6: boosted Cox and (in stage F) the network are fitted with NumPy code instead of XGBoost and PyTorch.")
+print(f"  Software: XGBoost {xgb.__version__}, LightGBM {lgb.__version__}, scikit-survival {sksurv.__version__}, scikit-learn {__import__('sklearn').__version__} (deviation D-7).")
 _ = A.close(outputs={"stage": "E", "locked_baselines": LOCKED_BASELINES, "active_models": ACTIVE_MODELS, "rsf_status": RSF_STATUS},
             extra_path=DIR["gates"] / "gate_E.json")
 print("\n  GATE E PASSED. Stage F (cells 37 to 42, network and CKINN) may start.")

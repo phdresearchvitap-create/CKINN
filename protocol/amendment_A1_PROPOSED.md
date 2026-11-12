@@ -54,4 +54,6 @@ This amendment consolidates and replaces the list in deviation D-4.
 
 | Item | Approved by investigator (date) | Approved by supervisor (date) |
 | --- | --- | --- |
-| A1.1 to A1.15 | pending | pending |
+| A1.1 to A1.15 | requested 2026-11-12 for full proposal coverage; recorded with its date when notebook cell 3 runs (`ckinn_results/audit/amendment_A1_approvals.json`) | pending |
+
+An item can be withdrawn before its cells run by setting it to False in notebook cell 3.

@@ -2,9 +2,11 @@
 # CELL 7 - structure of the raw tables: identifiers, duplicates, missingness, category codes     [status L; protocol sections 2 to 4]
 # Why: establishes one row per participant and exposes coding problems before anything is harmonized. This cell also
 # gives every raw column a short working name (by its Excel column letter); no value is changed.
-# session guard (same three lines in every cell): restores the earlier set-up cells by itself if the kernel was restarted
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 7)
 require_gate("A")
 A = Audit(7, "Structure, identifiers, missingness, category codes")
@@ -115,8 +117,11 @@ keep_for_session(7)
 # Why: a triglyceride, HDL, ALT or AST of exactly zero is not a possible result; it is a code for "not measured". Left
 # in, it would be read as the lowest value in the cohort. This cell only counts and reports. Nothing is deleted or
 # changed here; the D-3 rule (zero becomes missing) is applied at harmonization in cell 16.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 8)
 A = Audit(8, "Zero-coded and implausible values", status="D")
 
@@ -180,8 +185,11 @@ _ = A.close(outputs={"zeros": ZEROS, "d3_cells": D3_CELLS, "d3_rows": {"RICH": _
 # CELL 9 - the outcome: rebuild each event flag from its components                               [status L; protocol section 3]
 # Why: the label must be understood before any model sees it. RICH's event flag is a composite of a recorded diagnosis
 # and a fasting glucose of 7.0 mmol/L or more at the final visit; this cell proves that, and counts each part.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 9)
 A = Audit(9, "Outcome reconstruction")
 
@@ -217,8 +225,11 @@ _ = A.close(outputs={"rich_parts": PARTS, "rich_events": int(_ev.sum()), "nagala
 # CELL 10 - follow-up, censoring and support at the prediction horizon                            [status L, D; protocol sections 3, 6; D-1]
 # Why: confirms that 3 years is a supportable horizon, shows why a yes/no label at 3 years would be wrong (half of RICH
 # is censored before then), and reproduces deviation D-1 (site 14 cannot be a test site).
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 10)
 A = Audit(10, "Follow-up, censoring and horizon support")
 
@@ -298,8 +309,11 @@ keep_for_session(10)
 # Why: RICH contains only people followed for at least 2 years, and no RICH event is dated before 2.0 years. NAGALA has
 # events from the first year. A 3-year risk therefore means different things in the two cohorts, and transport between
 # them must compare like with like. This cell quantifies the difference; it fits no model.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 11)
 A = Audit(11, "Design difference: early events and the two risk estimands")
 
@@ -337,8 +351,11 @@ _ = A.close(outputs={"estimands": ESTIMANDS, "nagala_events_before_2y": 61, "nag
 # CELL 12 - sex coding and laboratory units                                                      [status L; protocol section 4]
 # Why: sex is a predictor in every tier, and the NAGALA header says "1:Men, 2:Women" while the data hold 0 and 1. A
 # reversed code would corrupt every cross-cohort result. Units are checked so that no conversion is needed.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 12)
 A = Audit(12, "Sex coding and laboratory units")
 
@@ -387,8 +404,11 @@ _ = A.close(outputs={"nagala_sex": SEX_N.reset_index().to_dict("records"), "rich
 # Why: the cohorts admitted different people (NAGALA stops at a baseline glucose of 6.05 mmol/L, RICH at 6.99), which
 # matters for transport. The same audit decides which proposal options (pp. 3 to 4) these data can support: current
 # diabetes classification, prediabetes to diabetes, and healthy to prediabetes. This cell fits no model.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 13)
 A = Audit(13, "Glycaemic eligibility and states")
 
@@ -453,8 +473,11 @@ _ = A.close(outputs={"strata": STRATA.to_dict("records"), "rich_transitions": {s
 # CELL 14 - GATE B: raw data and outcome audit                                                   [status L]
 # Why: a stop point. It re-derives the key figures of stage B from the raw tables, independently of cells 7 to 13, and
 # confirms those cells passed. Stage C (harmonization) starts only if this cell ends with ALL CHECKS PASSED.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 14)
 require_gate("A")
 A = Audit("gate_B", "Gate B: raw data and outcome audit")

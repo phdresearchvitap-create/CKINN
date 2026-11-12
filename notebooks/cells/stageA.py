@@ -1,7 +1,69 @@
+# %%
+# CELL 0 - Google Colab set-up: connect Google Drive, open the project folder, install what Colab lacks      [status L]
+# Why: Colab starts every new runtime empty. This cell connects Google Drive, opens the project folder, checks that the
+# workbooks and protocol files are where the notebook expects them, and installs scikit-survival and lifelines (the
+# only packages of the study that Colab does not ship). Run it first in every NEW runtime (after "Disconnect and delete
+# runtime" or an idle timeout). After "Restart session" it is not needed: every later cell reopens the folder itself.
+PROJECT_DIR = "/content/drive/MyDrive/CKINN_Research"      # change only if your project folder has another name or place
+
+import os, sys, subprocess, importlib, importlib.util, importlib.metadata
+from pathlib import Path
+
+try:
+    from google.colab import drive
+    drive.mount("/content/drive")
+    ON_COLAB = True
+except ImportError:                                          # not on Colab (e.g. a local Jupyter): use CKINN_DIR or this folder
+    ON_COLAB = False
+    PROJECT_DIR = os.environ.get("CKINN_DIR", str(Path.cwd()))
+os.environ["CKINN_DIR"] = PROJECT_DIR
+_P = Path(PROJECT_DIR)
+if not _P.is_dir():
+    raise FileNotFoundError(f"Project folder not found: {_P}. In Google Drive create My Drive/CKINN_Research and upload the files.")
+os.chdir(_P)
+print(f"Project folder: {Path.cwd()}   (Colab: {ON_COLAB})\n")
+
+# 1. expected files (the workbooks are recognised by content in cell 4, so their names do not matter)
+_xlsx = sorted(p.name for p in (_P / "data" / "raw").glob("*.xlsx")) if (_P / "data" / "raw").is_dir() else []
+_protocol = ["protocol_v1.0_LOCKED.md", "deviations.md", "proposal_coverage.csv", "amendment_A1_PROPOSED.md"]
+_missing_files = [f"protocol/{f}" for f in _protocol if not (_P / "protocol" / f).is_file()]
+print("Excel workbooks in data/raw:", _xlsx)
+print("Protocol files present:", [f for f in _protocol if (_P / "protocol" / f).is_file()])
+if len(_xlsx) < 2:
+    raise FileNotFoundError("data/raw must hold the two workbooks (NAGALA and RICH).")
+if _missing_files:
+    raise FileNotFoundError(f"Missing in the project folder: {_missing_files}. Upload the protocol folder unchanged.")
+
+# 2. packages: import name -> pip name. Only what is missing is installed.
+_PIP = {"numpy": "numpy", "pandas": "pandas", "scipy": "scipy", "sklearn": "scikit-learn", "matplotlib": "matplotlib",
+        "xgboost": "xgboost", "lightgbm": "lightgbm", "torch": "torch", "shap": "shap", "sksurv": "scikit-survival",
+        "lifelines": "lifelines"}
+_to_install = [pip for mod, pip in _PIP.items() if importlib.util.find_spec(mod) is None]
+if _to_install:
+    print(f"\nInstalling: {_to_install} (about a minute) ...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", *_to_install], check=True)
+    importlib.invalidate_caches()
+
+# 3. if an installation replaced a package that is already loaded in this session, the session must restart
+_dist = {"sklearn": "scikit-learn"}
+_stale = [f"{m} {getattr(sys.modules[m], '__version__', '?')} loaded, {importlib.metadata.version(_dist.get(m, m))} installed"
+          for m in ("numpy", "scipy", "pandas", "sklearn") if m in sys.modules
+          and getattr(sys.modules[m], "__version__", None) != importlib.metadata.version(_dist.get(m, m))]
+print("\nInstalled versions:")
+for _m, _pip in _PIP.items():
+    try:
+        print(f"   {_pip:16s} {importlib.metadata.version(_pip)}")
+    except importlib.metadata.PackageNotFoundError:
+        print(f"   {_pip:16s} NOT INSTALLED")
+if _stale:
+    raise RuntimeError("The installation changed packages already loaded in this session: " + "; ".join(_stale)
+                       + ". Click Runtime > Restart session, then run cell 0 again (nothing will be reinstalled).")
+print("\nCell 0 complete. Continue with cell 2 (cell 1 is text).")
+
 # %% [markdown]
 # # CKINN: clinical knowledge-informed neural networks for explainable, fair and cross-population prediction of type 2 diabetes risk
 #
-# **Cell 1. Scope of the study (status L).** This notebook is self-contained: it needs only the two Excel workbooks (RICH and NAGALA) in the same folder. It follows the 88-cell master plan and the locked analysis protocol v1.0; nothing in this notebook may change a locked setting.
+# **Cell 1. Scope of the study (status L).** This notebook runs in Google Colab. It needs the project folder on Google Drive (My Drive/CKINN_Research) with the two Excel workbooks in data/raw and the four protocol files in protocol/. It follows the 88-cell master plan and the locked analysis protocol v1.0; nothing in this notebook may change a locked setting.
 #
 # **What is predicted.** The absolute risk of incident diabetes within 3 years, in adults without diabetes at baseline. The outcome is diagnosis- or biomarker-defined. The output is a risk estimate, not a diagnosis, and no statement here is medical advice.
 #
@@ -17,11 +79,11 @@
 #
 # **Locked claims (protocol sections 1 and 11).** C1 discrimination, non-inferiority to the best baseline (margin 0.01 in C-index, tier T2); C2 better transport across cohorts; C3 better calibration under transport; C4 fewer violations of the clinical priors than the MLP. A claim that fails its rule is reported as not supported.
 #
-# **Status of every later cell.** L: locked protocol. D: logged deviation (D-1 to D-3). A: exploratory item of amendment A1, which runs only after it is approved in cell 3 and can never enter a C1 to C4 verdict. G: gated on data or clinical raters that do not exist yet; the cell runs a readiness check and stops.
+# **Status of every later cell.** L: locked protocol. D: logged deviation (D-1 to D-3; D-6 and D-7 concern software only). A: exploratory item of amendment A1, which runs only after it is approved in cell 3 and can never enter a C1 to C4 verdict. G: gated on data or clinical raters that do not exist yet; the cell runs a readiness check and stops.
 #
 # **Not claimable from these data.** Generalization beyond two East Asian health-screening cohorts; causal effects; a physiological differential-equation model; a full multistate progression model; fairness by ethnicity or socio-economic group.
 #
-# **Session rule.** Run the cells in order the first time. After that, if the kernel restarts (for example when a tablet app is closed or put in the background), simply run the next cell: its first three lines restore the earlier set-up cells automatically.
+# **Session rule.** Run cell 0 first in every new Colab runtime, then the cells in order. After "Restart session", or when you come back to a later cell, simply run that cell: its first lines reopen the project folder and restore the earlier set-up cells automatically. After "Disconnect and delete runtime" or a timeout, run cell 0 again first.
 
 # %%
 # CELL 2 - environment, seeds, folders, protocol constants, audit helpers        [status L; protocol section 12]
@@ -39,11 +101,22 @@ import pandas as pd
 pd.set_option("display.width", 200, "display.max_columns", 50, "display.max_rows", 200)
 
 # ---------------------------------------------------------------- folders: everything is written under ckinn_results/
-WORK = Path.cwd()                              # the folder that holds this notebook and the two workbooks
+_cand = Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _cand.is_dir():
+    os.chdir(_cand)
+WORK = Path.cwd()                              # the project folder (cell 0 opened it)
 OUT = WORK / "ckinn_results"
+LAYOUT = "ckinn-colab-1"                       # results written by this version of the notebook
+_marker = OUT / "layout.json"
+if OUT.exists() and not (_marker.exists() and json.loads(_marker.read_text(encoding="utf-8")).get("layout") == LAYOUT):
+    _old = WORK / f"ckinn_results_before_colab_{datetime.datetime.now():%Y%m%d_%H%M%S}"
+    OUT.rename(_old)                           # results of an earlier notebook version are kept, renamed, never deleted
+    print(f"  An earlier results folder (other notebook version) was renamed to {_old.name}; this run starts clean.\n")
 DIR = {k: OUT / k for k in ("cache", "data", "audit", "gates", "parts", "preds", "figs", "tables")}
 for _p in DIR.values():
     _p.mkdir(parents=True, exist_ok=True)
+if not _marker.exists():
+    _marker.write_text(json.dumps({"layout": LAYOUT, "created": datetime.datetime.now().isoformat(timespec="seconds")}) + "\n", encoding="utf-8")
 
 
 # ---------------------------------------------------------------- small helpers
@@ -93,7 +166,7 @@ def read_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-# ---------------------------------------------------------------- session restore (for kernels that restart, as on a tablet)
+# ---------------------------------------------------------------- session restore (after "Restart session" or a crash, the kernel forgets everything)
 # Cells that define things later cells need (2, 3, 4, 5, ...) save their own source in ckinn_results/session/. Every later
 # cell starts with three "session guard" lines; if the kernel was restarted, the guard re-runs the saved cells silently.
 SESSION = OUT / "session"
@@ -158,9 +231,11 @@ NO_TEST_SITES = (14,)                         # deviation D-1: follow-up shorter
 AGE_BANDS = [(0, 40, "under 40"), (40, 55, "40 to 54"), (55, 200, "55 and over")]      # section 9
 HP = {                                        # section 6; no other hyperparameter is tuned
     "cox_ridge": 0.01,
-    "xgb_trees": 300, "xgb_depth": 3, "xgb_eta": 0.05,
-    "hidden": (64, 64), "dropout": 0.1, "lr": 2e-3, "weight_decay": 1e-4, "batch": 8192,
-    "epochs": 40, "patience": 4, "val_frac": 0.10,
+    "xgb_trees": 300, "xgb_depth": 3, "xgb_eta": 0.05,       # the remaining boosting settings are those of the locked
+    "xgb_subsample": 0.8, "xgb_colsample": 0.8,               # reference code (kit src/ckinn/lib.py, XGBCox); fixed
+    "xgb_min_child_weight": 20, "xgb_tree_method": "hist",
+    "hidden": (64, 64), "activation": "relu", "dropout": 0.1, "lr": 2e-3, "weight_decay": 1e-4, "batch": 8192,
+    "epochs": 40, "patience": 4, "es_min_delta": 1e-4, "val_frac": 0.10, "pen_rows": 2048,
     "lambda_grid": (0.0, 0.1, 1.0, 10.0), "lambda_tol": 0.002, "lambda_fallback": 0.1, "inner_frac": 0.20}
 EVAL = {                                      # sections 8 and 9
     "cv_folds": 5, "cv_repeats": 3, "boot_n": 200, "boot_max_n": 40000, "recal_n": 1000,
@@ -182,17 +257,20 @@ random.seed(SEED)
 np.random.seed(SEED)
 
 # ---------------------------------------------------------------- packages: (import name, first stage that needs it, required or amendment-only)
-PACKAGES = [("numpy", "A", "required"), ("pandas", "A", "required"),
-            ("matplotlib", "C", "required"), ("scipy", "D", "required"), ("sklearn", "D", "required"),
-            ("lifelines", "D", "cross-check"), ("xgboost", "E", "required"), ("torch", "F", "required"),
-            ("sksurv", "E", "amendment A1.2"), ("lightgbm", "E", "amendment A1.2"), ("shap", "I", "amendment A1.8")]
+PACKAGES = [("numpy", "A", "required"), ("pandas", "A", "required"), ("matplotlib", "C", "required"),
+            ("scipy", "D", "required"), ("sklearn", "D", "required"), ("lifelines", "D", "reference checks"),
+            ("sksurv", "D", "reference checks; survival forest (A1.2)"), ("xgboost", "E", "boosted Cox (XGB, XGB-mono)"),
+            ("lightgbm", "E", "LightGBM comparator (A1.2)"), ("torch", "F", "MLP and CKINN"), ("shap", "I", "SHAP (A1.8)")]
 
 
 def package_table():
+    import warnings
     rows = []
     for name, stage, need in PACKAGES:
         try:
-            ver = getattr(importlib.import_module(name), "__version__", "installed")
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")                       # import-time notices (e.g. progress bars) are not results
+                ver = getattr(importlib.import_module(name), "__version__", "installed")
         except Exception:
             ver = None
         rows.append({"package": name, "version": ver or "NOT INSTALLED", "first needed in stage": stage, "need": need})
@@ -287,8 +365,8 @@ print(PKG.to_string(index=False), "\n")
 
 _have = dict(zip(PKG["package"], PKG["version"]))
 A.check("Python is 3.9 or newer", sys.version_info >= (3, 9), ENV["python"])
-A.check("packages needed in stages A and B are installed (numpy, pandas)",
-        all(_have[p] != "NOT INSTALLED" for p in ("numpy", "pandas")))
+A.check("every package the protocol and the amendment use is installed (if not: run cell 0)",
+        all(v != "NOT INSTALLED" for v in _have.values()), [k for k, v in _have.items() if v == "NOT INSTALLED"])
 A.check("one computation thread is set", ENV["threads"] == 1, f"CKINN_THREADS={ENV['threads']}")
 A.check("output folders exist and are writable", all(os.access(p, os.W_OK) for p in DIR.values()))
 A.check("tiers are nested T1 < T2 < T3 < T4",
@@ -297,7 +375,7 @@ A.check("headline tier T2 contains no glucose", "fpg" not in TIERS[HEADLINE_TIER
 A.check("every prior has direction +1 or -1", all(v in (+1, -1) for v in PRIORS.values()), PRIORS)
 _missing_later = [f"{r['package']} (stage {r['first needed in stage']}, {r['need']})" for _, r in PKG.iterrows() if r["version"] == "NOT INSTALLED"]
 if _missing_later:
-    print("\n  Not installed yet, needed later: " + "; ".join(_missing_later))
+    print("\n  Not installed: " + "; ".join(_missing_later) + ". Run cell 0, then this cell again.")
 _ = A.close(outputs={"work": str(WORK), "missing_later": _missing_later, "tiers": TIERS, "priors": PRIORS, "hp": HP, "eval": EVAL})
 keep_for_session(2)
 
@@ -305,35 +383,38 @@ keep_for_session(2)
 # CELL 3 - settings freeze, deviations register, amendment approvals              [status L; protocol sections 4 to 12]
 # Why: proves that the settings in cell 2 are exactly the locked ones, lists the logged deviations, and records which
 # exploratory items of amendment A1 the investigator has approved. Cells marked A refuse to run without approval.
-# session guard (same three lines in every cell): restores cells 2 to 5 by itself if the kernel was restarted
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 3)
 
-# ---- EDIT ONLY THIS BLOCK: set an item to True when you (and your supervisor, where required) approve it. ----------
+# ---- EDIT ONLY THIS BLOCK. True = the investigator approves the item (set to True for full proposal coverage, as the
+# investigator requested on 2026-11-12). Set an item to False if you or your supervisor do not approve it. ----------
 A1_APPROVED = {
-    "A1.1": False,   # additional metrics (AUPRC, calibration intercept, threshold metrics, violation magnitude)
-    "A1.2": False,   # additional comparators (survival forest; LR, RF, XGBoost, LightGBM, SVM classifiers)
-    "A1.3": False,   # H1 (CKINN better than MLP) reported separately from C1
-    "A1.4": False,   # prior ablations (one prior added, one removed, lambda path)
-    "A1.5": False,   # extended extras E4 (LDL, alcohol)
-    "A1.6": False,   # event-count audit before the locked recalibration
-    "A1.7": False,   # two-year landmark and eligibility-aligned sensitivity
-    "A1.8": False,   # explainability analyses
-    "A1.9": False,   # clinical expert review (gated on real ratings)
-    "A1.10": False,  # subgroup audit
-    "A1.11": False,  # fairness-aware CKINN
-    "A1.12": False,  # population alignment
-    "A1.13": False,  # knowledge-graph CKINN
-    "A1.14": False,  # glycaemic strata and one-step progression
-    "A1.15": False,  # gated branches (readiness checks only)
+    "A1.1": True,    # additional metrics (AUPRC, calibration intercept, threshold metrics, violation magnitude)
+    "A1.2": True,    # additional comparators (survival forest; LR, RF, XGBoost, LightGBM, SVM classifiers)
+    "A1.3": True,    # H1 (CKINN better than MLP) reported separately from C1
+    "A1.4": True,    # prior ablations (one prior added, one removed, lambda path)
+    "A1.5": True,    # extended extras E4 (LDL, alcohol)
+    "A1.6": True,    # event-count audit before the locked recalibration
+    "A1.7": True,    # two-year landmark and eligibility-aligned sensitivity
+    "A1.8": True,    # explainability analyses
+    "A1.9": True,    # clinical expert review (gated on real ratings)
+    "A1.10": True,   # subgroup audit
+    "A1.11": True,   # fairness-aware CKINN
+    "A1.12": True,   # population alignment
+    "A1.13": True,   # knowledge-graph CKINN
+    "A1.14": True,   # glycaemic strata and one-step progression
+    "A1.15": True,   # gated branches (readiness checks only)
 }
 # ---------------------------------------------------------------------------------------------------------------------
 
 A = Audit(3, "Settings freeze, deviations, amendment approvals")
 
 # 1. the whole settings block must equal the frozen fingerprint
-LOCKED_SETTINGS_SHA = "66d76d3adcc9a1e88c740f61153565d552dfdb2ebe14dd2bb1b03a2e837e672e"
+LOCKED_SETTINGS_SHA = "dfa0be3f990d8c511cd37ec2e27ca342b55c68bf70401bced3d4b3409e647b1d"
 A.check("settings of cell 2 equal the frozen fingerprint (nothing was edited)", settings_fingerprint() == LOCKED_SETTINGS_SHA,
         settings_fingerprint()[:16] + "...")
 
@@ -375,16 +456,15 @@ LOCKED = [
 for sec, name, ok, phrase in LOCKED:
     A.check(f"section {sec:>2}: {name}", ok)
 
-# 3. optional: if the protocol document itself is in this folder, check its hash and that every phrase above is in it
-_pfile = next((p for p in (WORK / "protocol_v1.0_LOCKED.md", WORK / "protocol" / "protocol_v1.0_LOCKED.md",
-                           WORK.parent / "protocol" / "protocol_v1.0_LOCKED.md") if p.exists()), None)
-if _pfile is None:
-    print("\n  Protocol document not in this folder: settings are verified by value and by fingerprint (enough to proceed).")
-else:
-    _ptext = _pfile.read_text(encoding="utf-8")
-    A.check("protocol document has the locked SHA-256", sha256_file(_pfile) == PROTOCOL_SHA, _pfile.name)
-    A.check("every locked value above is stated in the protocol document", all(ph in _ptext for *_x, ph in LOCKED),
-            [n for _s, n, _o, ph in LOCKED if ph not in _ptext])
+# 3. the locked protocol document itself: its SHA-256, and every phrase above must be in it
+PROTOCOL_DIR = WORK / "protocol"
+_pfile = PROTOCOL_DIR / "protocol_v1.0_LOCKED.md"
+A.check("protocol/protocol_v1.0_LOCKED.md is present", _pfile.is_file(), "upload the protocol folder unchanged" if not _pfile.is_file() else "")
+_ptext = _pfile.read_text(encoding="utf-8") if _pfile.is_file() else ""
+A.check("protocol document has the locked SHA-256 (byte for byte the locked file)", _pfile.is_file() and sha256_file(_pfile) == PROTOCOL_SHA,
+        "if this fails, upload the original file again; do not open and save it in an editor" if _pfile.is_file() and sha256_file(_pfile) != PROTOCOL_SHA else "")
+A.check("every locked value above is stated in the protocol document", bool(_ptext) and all(ph in _ptext for *_x, ph in LOCKED),
+        [n for _s, n, _o, ph in LOCKED if ph not in _ptext])
 
 # 4. deviations logged so far (date; rule; effect on the claims)
 DEVIATIONS = [
@@ -396,11 +476,18 @@ DEVIATIONS = [
     ("D-6", "2026-11-12", "Software on the tablet: the study runs in Carnets Plus on an iPad, where XGBoost and PyTorch cannot be installed. The boosted "
                           "Cox models and the networks are fitted with NumPy code of the same algorithms and locked settings (boosting: 300 trees, depth 3, "
                           "rate 0.05, L2 penalty 1, minimum child weight 20, no random subsampling). Logged before any model result existed.", "none on the rules"),
+    ("D-7", "2026-11-12", "D-6 is withdrawn. The study now runs in Google Colab, where XGBoost, LightGBM, PyTorch, SHAP, lifelines and "
+                          "scikit-survival are available; every model is fitted with the software named in the protocol and the settings of the "
+                          "locked reference code. Disclosed: single-fold smoke-test metrics (RICH, repeat 0 fold 0) were seen during development; "
+                          "no cross-validated, site, shift, cross-cohort, neural or CKINN result exists.", "none"),
 ]
 print("\n  Deviations on file:")
 for d_id, d_date, d_text, d_effect in DEVIATIONS:
     print(f"   {d_id}  {d_date}  {d_text}  Effect on C1 to C4: {d_effect}.")
-A.check("deviations D-1 to D-6 are listed", [d[0] for d in DEVIATIONS] == [f"D-{i}" for i in range(1, 7)])
+A.check("deviations D-1 to D-7 are listed", [d[0] for d in DEVIATIONS] == [f"D-{i}" for i in range(1, 8)])
+_dfile = PROTOCOL_DIR / "deviations.md"
+DEV_IDS_FILE = re.findall(r"^## (D-\d+) ", _dfile.read_text(encoding="utf-8"), flags=re.M) if _dfile.is_file() else []
+A.check("protocol/deviations.md records the same deviations, D-1 to D-7", DEV_IDS_FILE == [d[0] for d in DEVIATIONS], DEV_IDS_FILE)
 A.check("deviation D-1 is implemented in the settings (site 14 never tested)", NO_TEST_SITES == (14,))
 
 # 5. amendment A1: items and approvals
@@ -412,6 +499,9 @@ A1_ITEMS = {
     "A1.13": "Knowledge-graph CKINN", "A1.14": "Glycaemic strata and progression", "A1.15": "Gated branches"}
 A1_SHA = sha256_text(json.dumps(A1_ITEMS, sort_keys=True))
 A.check("the approval block names exactly items A1.1 to A1.15", set(A1_APPROVED) == set(A1_ITEMS), len(A1_APPROVED))
+_afile = PROTOCOL_DIR / "amendment_A1_PROPOSED.md"
+_afile_items = dict(re.findall(r"^\*\*(A1\.\d+) (.*?)\.\*\*", _afile.read_text(encoding="utf-8"), flags=re.M)) if _afile.is_file() else {}
+A.check("protocol/amendment_A1_PROPOSED.md defines the same fifteen items", _afile_items == A1_ITEMS, sorted(set(_afile_items) ^ set(A1_ITEMS)))
 A.check("approval values are True or False", all(isinstance(v, bool) for v in A1_APPROVED.values()))
 
 APPROVAL_FILE = DIR["audit"] / "amendment_A1_approvals.json"
@@ -439,8 +529,9 @@ def require_approval(item):
 print("\n  Amendment A1 (exploratory; none of these can enter a C1 to C4 verdict):")
 print(pd.DataFrame([{"item": k, "approved": v["approved"], "approved on": v["approved_on"] or "", "title": v["title"]}
                     for k, v in APPROVALS["items"].items()]).to_string(index=False))
+PROTOCOL_FILES_SHA = {f.name: sha256_file(f) for f in (_pfile, _dfile, _afile, PROTOCOL_DIR / "proposal_coverage.csv") if f.is_file()}
 _ = A.close(outputs={"settings_sha": LOCKED_SETTINGS_SHA, "deviations": [d[0] for d in DEVIATIONS], "amendment_sha": A1_SHA,
-                     "approved_items": [k for k, v in A1_APPROVED.items() if v]})
+                     "approved_items": [k for k, v in A1_APPROVED.items() if v], "protocol_files_sha": PROTOCOL_FILES_SHA})
 keep_for_session(3)
 
 # %%
@@ -449,10 +540,12 @@ keep_for_session(3)
 # never written. The Excel files are read with the Python standard library only (no openpyxl needed). The first run
 # reads them (RICH can take a few minutes); later runs load a cache that is accepted only if its recorded source hash
 # and its content hash both still match.
-# On a tablet, keep the app open and in front while this cell runs the first time.
-# session guard (same three lines in every cell): restores cells 2 to 5 by itself if the kernel was restarted
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# The first run reads the workbooks from Google Drive and takes about a minute.
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 4)
 A = Audit(4, "Raw workbooks: hashes, shapes, headers, cache")
 
@@ -556,7 +649,7 @@ RAW, DATA_SHA, RAW_PATH, _inventory = {}, {}, {}, []
 for cohort, spec in RAW_SPEC.items():
     path = next((p for p, s in _XLSX.items() if s == spec["sha"]), None)
     if not A.check(f"{cohort}: workbook with the published SHA-256 was found", path is not None,
-                   path.name if path else f"put the original {spec['usual_name']} in the notebook folder"):
+                   path.name if path else f"put the original {spec['usual_name']} in data/raw of the project folder"):
         continue
     RAW_PATH[cohort], DATA_SHA[cohort] = path, spec["sha"]
     cache, meta_p = DIR["cache"] / f"{cohort.lower()}_raw.pkl", DIR["cache"] / f"{cohort.lower()}_raw.json"
@@ -564,9 +657,12 @@ for cohort, spec in RAW_SPEC.items():
     if cache.exists() and meta_p.exists():
         meta = read_json(meta_p)
         if meta.get("source_sha") == spec["sha"]:
-            cand = pd.read_pickle(cache)
-            if content_sha(cand) == meta.get("content_sha") and list(cand.shape) == meta.get("shape"):
-                df = cand
+            try:
+                cand = pd.read_pickle(cache)
+                if content_sha(cand) == meta.get("content_sha") and list(cand.shape) == meta.get("shape"):
+                    df = cand
+            except Exception:                  # a cache written by another pandas version: read the workbook again
+                df = None
     if df is None:
         t0 = time.time()
         sheets, df = read_xlsx_first_sheet(path)
@@ -615,9 +711,11 @@ keep_for_session(4)
 # Why: makes it impossible for a proposal requirement to drop out unnoticed. The final audit (cell 86) re-reads this
 # register and demands, for every row, either a result file or a recorded blocking reason.
 # Columns: id, proposal page, proposal section, requirement, verdict, notebook cells, status (L, D, A, G), note.
-# session guard (same three lines in every cell): restores cells 2 to 5 by itself if the kernel was restarted
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 5)
 REGISTER_CSV = """
 id,page,section,requirement,verdict,cells,status,note
@@ -731,6 +829,10 @@ def _sections(s):
     return [int(re.sub(r"[^0-9]", "", x)) for x in s.split(";") if re.sub(r"[^0-9]", "", x)]
 
 
+_regfile = WORK / "protocol" / "proposal_coverage.csv"
+_reg_disk = pd.read_csv(_regfile, dtype=str, keep_default_na=False) if _regfile.is_file() else None
+A.check("protocol/proposal_coverage.csv is present and identical, row for row, to the register in this cell",
+        _reg_disk is not None and _reg_disk.equals(REG), "missing" if _reg_disk is None else ("identical" if _reg_disk.equals(REG) else "differs"))
 A.check("register has the expected columns", list(REG.columns) == ["id", "page", "section", "requirement", "verdict", "cells", "status", "note"])
 A.check("86 requirements, identifiers unique", len(REG) == 86 and REG["id"].is_unique, len(REG))
 A.check("no requirement lacks a description, a verdict, a cell or a status",
@@ -768,9 +870,11 @@ keep_for_session(5)
 # CELL 6 - GATE A: governance and source authority                                              [status L]
 # Why: a stop point that re-verifies stage A from the files themselves, not from memory. Stage B starts only if this
 # cell ends with ALL CHECKS PASSED. A record on disk counts only when its hashes equal the current settings and files.
-# session guard (same three lines in every cell): restores cells 2 to 5 by itself if the kernel was restarted
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 6)
 A = Audit("gate_A", "Gate A: governance and source authority")
 
@@ -788,9 +892,12 @@ for cohort, spec in RAW_SPEC.items():
     _meta = DIR["cache"] / f"{cohort.lower()}_raw.json"
     A.check(f"{cohort}: cache on disk equals the one audited in cell 4", _meta.exists() and read_json(_meta)["content_sha"] == _audited)
 A.check("coverage register unchanged since cell 5", bool(_recs[5]) and REG_SHA == _recs[5]["outputs"]["register_sha"])
+_pf = _recs[3]["outputs"].get("protocol_files_sha", {}) if _recs[3] else {}
+A.check("the four protocol files are unchanged since cell 3 (locked protocol, deviations, amendment, coverage register)",
+        len(_pf) == 4 and all((PROTOCOL_DIR / n).is_file() and sha256_file(PROTOCOL_DIR / n) == h for n, h in _pf.items()), sorted(_pf))
 
 _approved = [k for k, v in read_json(APPROVAL_FILE)["items"].items() if v["approved"]]
 print(f"\n  Amendment items approved so far: {_approved if _approved else 'none (only L and D cells can run)'}")
-print("  Packages still to install before later stages: " + ("; ".join(_recs[2]["outputs"]["missing_later"]) or "none"))
+print("  Packages missing: " + ("; ".join(_recs[2]["outputs"]["missing_later"]) or "none"))
 _ = A.close(outputs={"stage": "A", "approved_items": _approved, "data_sha": DATA_SHA}, extra_path=DIR["gates"] / "gate_A.json")
 print("\n  GATE A PASSED. Stage B (cells 7 to 14, raw-data forensics) may start.")

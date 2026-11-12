@@ -2,9 +2,11 @@
 # CELL 15 - feature registry: every input named in the proposal, and where it is (or is not) in the data    [status L; proposal pp. 1-2, 5-6]
 # Why: the proposal says variables must be "justified clinically and assessed for leakage, fairness, missingness and
 # availability" and not put in blindly. This registry is the single list that cell 16 builds the harmonized data from.
-# session guard (same three lines in every cell): restores the earlier set-up cells by itself if the kernel was restarted
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 15)
 require_gate("B")
 A = Audit(15, "Feature registry")
@@ -78,8 +80,11 @@ keep_for_session(15)
 # CELL 16 - harmonization: one schema for both cohorts                                           [status L, D; protocol sections 3-5; D-3]
 # Why: every later cell reads these two tables. Values are copied, never imputed: missing stays missing. The only
 # change to any value is deviation D-3 (zero-coded triglycerides, HDL, ALT, AST become missing). No row is removed.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 16)
 A = Audit(16, "Harmonization", status="L, D")
 
@@ -199,8 +204,11 @@ keep_for_session(16)
 # CELL 17 - predictor sets, the prior for each, and the leakage blocklist                        [status L; protocol sections 4, 7; A1.5 if approved]
 # Why: fixes exactly which columns each model may see. A model cell can only obtain predictors through predictors(),
 # which refuses any column on the blocklist, so outcome information cannot enter a model by accident.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 17)
 A = Audit(17, "Predictor sets, priors and leakage blocklist")
 
@@ -282,8 +290,11 @@ keep_for_session(17)
 # CELL 18 - Table 1, differences between the cohorts, and missingness by site                    [status L; proposal p. 12]
 # Why: any transport result has to be read against how the two populations differ. Standardized differences describe
 # the covariate shift; the site table shows how strongly missingness in RICH depends on the site.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 18)
 A = Audit(18, "Table 1, cohort differences, missingness by site")
 
@@ -360,8 +371,11 @@ _ = A.close(outputs={"smd": SMD.to_dict(), "hdl_event_percent_recorded_vs_missin
 # Why: the proposal calls the priors relationships that hold "generally", not laws. This cell shows, without any model,
 # how the observed 3-year risk moves across fifths of each constrained variable in each cohort. It is descriptive and
 # was disclosed in protocol section 0; it does not choose or change any prior.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 19)
 A = Audit(19, "Descriptive check of the clinical priors")
 import matplotlib
@@ -443,8 +457,11 @@ _ = A.close(outputs={"prior_check": PRIOR_CHECK.to_dict("records"), "files": ["r
 # CELL 20 - how many events each subgroup has                                                    [status L; proposal p. 15; protocol section 9]
 # Why: a subgroup comparison is only as good as the number of events behind it. This table decides, before any model
 # is fitted, which subgroup results can be estimated and which must be reported as underpowered.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 20)
 A = Audit(20, "Subgroup event counts")
 
@@ -494,8 +511,11 @@ _ = A.close(outputs={"min_events_3y": MIN_EVENTS_3Y, "underpowered": _under.to_d
 # CELL 21 - GATE C: harmonized predictors and estimands                                          [status L]
 # Why: a stop point before any statistical or model code. It reloads the saved harmonized tables from disk, confirms
 # they are the ones audited in cell 16, and re-checks the leakage rules. Stage D starts only if this cell passes.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 21)
 require_gate("B")
 A = Audit("gate_C", "Gate C: harmonized predictors and estimands")

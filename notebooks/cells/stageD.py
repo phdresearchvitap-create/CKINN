@@ -2,9 +2,11 @@
 # CELL 22 - preprocessing fitted on training rows only, and every data split of the protocol      [status L; protocol sections 5, 8, 12]
 # Why: test data must never inform how missing values are filled or how variables are scaled, and every analysis must
 # use exactly the splits the protocol names. All tests in stage D run on small hand-made toy arrays, never on study data.
-# session guard (same three lines in every cell): restores the earlier set-up cells by itself if the kernel was restarted
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 22)
 require_gate("C")
 A = Audit(22, "Preprocessing and data splits")
@@ -144,8 +146,11 @@ keep_for_session(22)
 # Why: this is the estimand of the whole study. risk(3 | x) = 1 - exp(-H0(3) exp(lp(x))), with H0 the Breslow baseline
 # cumulative hazard from training data. The code is checked against a hand calculation and against reference values
 # produced once with the lifelines package (0.30.3) on the same toy data.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 23)
 A = Audit(23, "Cox partial likelihood, Breslow hazard, absolute risk")
 
@@ -308,7 +313,18 @@ class _ToyModel:
 
 
 A.check("fit_with_baseline returns the same risks as the direct calculation", np.allclose(fit_with_baseline(_ToyModel(), _tr).risk(_te), _r3, atol=1e-15))
-_ = A.close(outputs={"cox_toy": {k: v.tolist() for k, v in _fit.items()}, "reference": "lifelines 0.30.3"})
+# live check against lifelines installed on this machine (in addition to the stored reference values above)
+import lifelines
+from lifelines import CoxPHFitter
+_ll = {name: CoxPHFitter(penalizer=pen).fit(_tr[["x1", "x2", "time_y", "event"]], "time_y", "event") for name, pen in (("unpenalized", 0.0), ("ridge 0.01", 0.01))}
+A.check(f"live: lifelines {lifelines.__version__} on this machine gives the same Cox coefficients (6 decimals) and log-likelihood",
+        all(np.allclose(_fit[k], _ll[k].params_.to_numpy(), atol=1e-6) for k in _ll)
+        and abs(_ll["unpenalized"].log_likelihood_ + cox_newton(_Z, _t, _e, 0.0)[1] * len(_tr)) < 1e-6)
+_m = _ll["ridge 0.01"]
+_risk_ll = 1 - _m.predict_survival_function(_te[["x1", "x2"]], times=[3.0]).to_numpy().ravel()
+_risk_me = risk_at(Breslow(_t, _e, _tr[["x1", "x2"]].to_numpy() @ _m.params_.to_numpy()), _te[["x1", "x2"]].to_numpy() @ _m.params_.to_numpy(), 3.0)
+A.check("live: Breslow baseline and 3-year risk equal lifelines' predicted survival", np.allclose(_risk_ll, _risk_me, atol=1e-10), float(np.abs(_risk_ll - _risk_me).max()))
+_ = A.close(outputs={"cox_toy": {k: v.tolist() for k, v in _fit.items()}, "reference": f"lifelines 0.30.3 (stored); lifelines {lifelines.__version__} (live)"})
 keep_for_session(23)
 
 # %%
@@ -316,8 +332,11 @@ keep_for_session(23)
 # Why: every 3-year metric needs the observed risk (Kaplan-Meier) and, because half of RICH is censored before 3 years,
 # weights that make the participants with known 3-year status stand in for the censored ones. Nobody censored early is
 # ever counted as a non-event: their weight is zero and the others are weighted up.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 24)
 A = Audit(24, "Kaplan-Meier, censoring distribution, censoring weights")
 
@@ -389,7 +408,19 @@ A.check("weights are at least 1; every participant followed beyond the horizon h
         (_w[_case | _ctrl] >= 1).all() and np.allclose(_w[_ctrl], 1 / 0.590283704066138, atol=1e-9), round(float(1 / _w[_ctrl][0]), 6))
 _all1 = toy_survival(300, ties=False).assign(event=1)
 A.check("without any censoring every weight is exactly 1", (ipcw(_all1, _all1, 3.0)[2] == 1.0).all())
-_ = A.close(outputs={"reference": "lifelines 0.30.3; scikit-survival 0.28.0 (tie convention)"})
+# live checks against lifelines and scikit-survival installed on this machine
+import sksurv
+import lifelines
+from lifelines import KaplanMeierFitter
+from sksurv.nonparametric import CensoringDistributionEstimator
+from sksurv.util import Surv
+_kmf = KaplanMeierFitter().fit(_d["time_y"], _d["event"])
+_grid = np.linspace(0, 6, 61)
+A.check(f"live: Kaplan-Meier equals lifelines {lifelines.__version__} at 61 time points", np.allclose(km_survival(_d["time_y"], _d["event"], _grid), _kmf.survival_function_at_times(_grid).to_numpy(), atol=1e-12))
+_cde = CensoringDistributionEstimator().fit(Surv.from_arrays(_tr["event"].astype(bool).to_numpy(), _tr["time_y"].to_numpy()))
+_tt = _tk["time_y"].to_numpy()
+A.check(f"live: censoring distribution equals scikit-survival {sksurv.__version__} at every toy test time", np.allclose(censoring_survival(_tr["time_y"], _tr["event"], _tt), _cde.predict_proba(_tt), atol=1e-12))
+_ = A.close(outputs={"reference": f"lifelines 0.30.3, scikit-survival 0.28.0 (stored); lifelines {lifelines.__version__}, scikit-survival {sksurv.__version__} (live)"})
 keep_for_session(24)
 
 # %%
@@ -397,8 +428,11 @@ keep_for_session(24)
 # Why: C-index, time-dependent AUC and the Brier score are the protocol's discrimination and accuracy metrics. Each is
 # checked against reference values from lifelines and scikit-survival on the toy data. The average precision (AUPRC,
 # proposal pp. 15, 22) is defined and tested here but is computed on study data only if amendment item A1.1 is approved.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 25)
 A = Audit(25, "Discrimination and Brier score")
 
@@ -497,7 +531,26 @@ A.check("AUPRC equals the scikit-learn reference on the toy rows (also with tied
         abs(average_precision_at(_tr, _tk, _lpk, 3.0) - REF["auprc"]) < 1e-12 and abs(average_precision_at(_tr, _tk, np.round(_lpk, 1), 3.0) - REF["auprc_tied_scores"]) < 1e-12
         and abs(average_precision_at(_u, _u, np.zeros(300), 3.0) - _yu.mean()) < 1e-12,
         round(average_precision_at(_tr, _tk, _lpk, 3.0), 6))
-_ = A.close(outputs={"reference_values": REF, "references": "lifelines 0.30.3; scikit-survival 0.28.0; scikit-learn 1.9.1"})
+# live checks against lifelines, scikit-survival and scikit-learn installed on this machine
+import sklearn
+import sksurv
+from lifelines.utils import concordance_index as _ll_cindex
+from sksurv.metrics import cumulative_dynamic_auc as _sk_auc, brier_score as _sk_brier
+from sksurv.util import Surv
+from sklearn.metrics import average_precision_score
+A.check("live: C-index equals lifelines on the toy test rows, also with tied scores",
+        abs(concordance_index(_te["time_y"], _lp_te, _te["event"]) - _ll_cindex(_te["time_y"], -_lp_te, _te["event"])) < 1e-12
+        and abs(concordance_index(_te["time_y"], np.round(_lp_te, 1), _te["event"]) - _ll_cindex(_te["time_y"], -np.round(_lp_te, 1), _te["event"])) < 1e-12)
+_ytr = Surv.from_arrays(_tr["event"].astype(bool).to_numpy(), _tr["time_y"].to_numpy())
+_ytk = Surv.from_arrays(_tk["event"].astype(bool).to_numpy(), _tk["time_y"].to_numpy())
+A.check(f"live: AUC and Brier score at 3 years equal scikit-survival {sksurv.__version__}",
+        abs(auc_at(_tr, _tk, _lpk, 3.0) - float(_sk_auc(_ytr, _ytk, _lpk, [3.0])[0][0])) < 1e-12
+        and abs(brier_at(_tr, _tk, _rk, 3.0) - float(_sk_brier(_ytr, _ytk, (1 - _rk)[:, None], [3.0])[1][0])) < 1e-12)
+_c, _k, _w = ipcw(_tr, _tk, 3.0)
+_kn = _c | _k
+A.check(f"live: AUPRC equals scikit-learn {sklearn.__version__} average precision with the same weights",
+        abs(average_precision_at(_tr, _tk, _lpk, 3.0) - average_precision_score(_c[_kn].astype(int), _lpk[_kn], sample_weight=_w[_kn])) < 1e-12)
+_ = A.close(outputs={"reference_values": REF, "references": "stored: lifelines 0.30.3, scikit-survival 0.28.0, scikit-learn 1.9.1; live: versions on this machine"})
 keep_for_session(25)
 
 # %%
@@ -505,8 +558,11 @@ keep_for_session(25)
 # Why: a risk of 5% should mean that about 5 in 100 such people develop diabetes within 3 years (proposal pp. 15-16).
 # Calibration slope, calibration distance |slope - 1|, observed-to-expected ratio, the table by tenths of risk and the
 # decision curve are the protocol's measures. The calibration intercept is an amendment metric (A1.1).
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 26)
 A = Audit(26, "Calibration and decision curve")
 
@@ -577,7 +633,10 @@ A.check("decision curve: when every predicted risk exceeds the threshold, the mo
         _r3.min() > 0.05 and abs(_dc.loc[0, "net_benefit"] - _dc.loc[0, "treat_all"]) < 1e-12 and _dc.loc[0, "share_above"] == 1.0)
 A.check("decision curve: net benefit of acting on nobody is 0, and the default thresholds are 1% to 10%",
         (_dc["treat_none"] == 0).all() and decision_curve(_r3, _te)["threshold"].round(2).tolist() == [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1])
-_ = A.close(outputs={"reference": "lifelines 0.30.3 (calibration slope)"})
+from lifelines import CoxPHFitter
+_ll_slope = float(CoxPHFitter().fit(pd.DataFrame({"z": cloglog(_r3), "T": _te["time_y"].to_numpy(), "E": _te["event"].to_numpy()}), "T", "E").params_["z"])
+A.check("live: calibration slope equals lifelines' one-variable Cox fit to 5 decimals", abs(cal_slope(_r3, _te) - _ll_slope) < 1e-5, round(_ll_slope, 6))
+_ = A.close(outputs={"reference": "lifelines 0.30.3 (stored) and the installed lifelines (live)"})
 keep_for_session(26)
 
 # %%
@@ -585,8 +644,11 @@ keep_for_session(26)
 # Why: the proposal asks for sensitivity, specificity, PPV, NPV, F1 and false-negative rate. With censored follow-up these
 # need the weights of cell 24. The function is defined and tested on toy arrays here; it is applied to study data only
 # in cells that first call require_approval("A1.1").
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 27)
 A = Audit(27, "Threshold metrics with censoring weights", status="A")
 
@@ -644,8 +706,11 @@ keep_for_session(27)
 # Why: the decision rules rest on the Nadeau-Bengio interval (cross-validation) and on the paired bootstrap (cross-cohort),
 # and claim C4 on the violation rate. The unit runner makes long runs resumable: a stored result is reused only if its
 # record shows the same settings, data, code and file content; a file merely existing on disk proves nothing.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 28)
 A = Audit(28, "Inference, violations, metric bundle, unit runner")
 from scipy import stats as _stats
@@ -884,8 +949,11 @@ keep_for_session(28)
 # CELL 29 - GATE D: the statistical toolkit                                                       [status L]
 # Why: a stop point before any model is fitted to study data. It confirms that cells 22 to 28 passed all their tests on
 # toy arrays, re-runs one end-to-end toy analysis, and confirms that the toolkit has not touched the study outcome.
-_g = __import__("pathlib").Path.cwd() / "ckinn_results" / "session" / "guard.py"
-if not _g.exists(): raise RuntimeError("Run cell 2 first.")
+# session guard (same lines in every cell): reopens the project folder and restores earlier set-up cells after a restart
+import os, pathlib; _w = pathlib.Path(os.environ.get("CKINN_DIR", "/content/drive/MyDrive/CKINN_Research"))
+if _w.is_dir() and pathlib.Path.cwd().resolve() != _w.resolve(): os.chdir(_w)
+_g = pathlib.Path.cwd() / "ckinn_results" / "session" / "guard.py"
+if not _g.exists(): raise RuntimeError("Run cell 0 (Google Drive) and cells 2 and 3 first.")
 exec(_g.read_text(encoding="utf-8")); _ckinn_restore(globals(), 29)
 require_gate("C")
 A = Audit("gate_D", "Gate D: statistical toolkit")

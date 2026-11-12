@@ -8,7 +8,7 @@ The number 88 was not a target. It is what remains after every proposal requirem
 
 Companion files: `protocol/proposal_coverage.csv` (the requirement-by-requirement register, 86 rows) and `protocol/amendment_A1_PROPOSED.md` (everything in this plan that is not in the locked protocol).
 
-Assumption: ordinary Jupyter with PyTorch. Extra packages needed only by amendment cells: `scikit-survival`, `lightgbm`, `shap`.
+Platform (from 2026-11-12, deviation D-7): Google Colab on the investigator's Windows laptop, project folder `My Drive/CKINN_Research`. Notebook cell 0 connects Google Drive and installs scikit-survival and lifelines; XGBoost, LightGBM, PyTorch and SHAP ship with Colab. Built notebook: `notebooks/CKINN_colab.ipynb`; the same cells as text: `notebooks/CKINN_colab_cells.txt`.
 
 ## 1. Status codes
 

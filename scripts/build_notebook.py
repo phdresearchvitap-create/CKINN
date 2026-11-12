@@ -1,4 +1,4 @@
-"""Build notebooks/CKINN_main.ipynb from the cell sources in notebooks/cells/stage*.py.
+"""Build notebooks/CKINN_colab.ipynb and notebooks/CKINN_colab_cells.txt from the cell sources in notebooks/cells/stage*.py.
 
 The sources use the percent format: a line starting with '# %%' opens a code cell and '# %% [markdown]' a markdown
 cell. The notebook is written without outputs; it is executed by the investigator, cell by cell.
@@ -36,7 +36,9 @@ for src in sorted((ROOT / 'notebooks' / 'cells').glob('stage*.py')):
 
 nb = {'cells': cells, 'metadata': {'kernelspec': {'display_name': 'Python 3', 'language': 'python', 'name': 'python3'},
                                    'language_info': {'name': 'python'}}, 'nbformat': 4, 'nbformat_minor': 5}
-out = ROOT / 'notebooks' / 'CKINN_main.ipynb'
+out = ROOT / 'notebooks' / 'CKINN_colab.ipynb'
 out.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + '\n', encoding='utf-8')
-print(f'wrote {out.relative_to(ROOT)}: {len(cells)} cells '
+txt = ROOT / 'notebooks' / 'CKINN_colab_cells.txt'
+txt.write_text(''.join(src.read_text(encoding='utf-8').rstrip() + '\n\n' for src in sorted((ROOT / 'notebooks' / 'cells').glob('stage*.py'))), encoding='utf-8')
+print(f'wrote {out.relative_to(ROOT)} and {txt.relative_to(ROOT)}: {len(cells)} cells '
       f"({sum(c['cell_type'] == 'code' for c in cells)} code, {sum(c['cell_type'] == 'markdown' for c in cells)} markdown)")
