@@ -1,0 +1,510 @@
+{
+  "created_utc": "2026-11-20T16:16:44+00:00",
+  "mode": "full",
+  "configuration_sha256": "7cdc5bdde12b17df19a15650f00f1fe693168b33f39b193219ded6d70ea0468b",
+  "configuration": {
+    "alpha": 0.05,
+    "aug_prob": 0.5,
+    "batch": 1024,
+    "dca_a": [
+      0.01,
+      0.2,
+      0.01
+    ],
+    "dca_b": [
+      0.005,
+      0.1,
+      0.005
+    ],
+    "dev_frac": 0.2,
+    "dev_max_rows": 20000,
+    "fpr_matched": 0.1,
+    "horizon": 3.0,
+    "ig_steps": 32,
+    "lam_grid": [
+      0.03,
+      0.1,
+      0.3,
+      1.0,
+      3.0,
+      10.0,
+      30.0,
+      100.0
+    ],
+    "lam_reps": 2,
+    "max_epochs": 40,
+    "max_rows": {
+      "NAGALA": 0,
+      "NHANES": 0,
+      "RICH": 0
+    },
+    "mi_iter": 10,
+    "mi_m": 5,
+    "min_group_events": 20,
+    "miss_mechs": [
+      "mcar",
+      "mar",
+      "mnar"
+    ],
+    "miss_rates": [
+      0.1,
+      0.3,
+      0.5
+    ],
+    "mode": "full",
+    "n_boot": 2000,
+    "n_boot_band": 200,
+    "n_boot_desc": 500,
+    "n_explain": 1000,
+    "n_pd_rows": 500,
+    "n_repeats": 5,
+    "n_seeds": 5,
+    "n_splits": 5,
+    "nagala_horizon2": 5.0,
+    "nb_points_a": [
+      0.05,
+      0.1
+    ],
+    "nb_points_b": [
+      0.02,
+      0.05
+    ],
+    "ni_margin": 0.01,
+    "p_feat_drop": 0.1,
+    "p_panel_drop": 0.3,
+    "patience": 4,
+    "primary_miss": [
+      "mcar",
+      0.3
+    ],
+    "recal_n": 1000,
+    "rf_trees": 200,
+    "seed": 20261120,
+    "sens_target": 0.8,
+    "site_min_events": 100,
+    "sparse_quantile": 0.95,
+    "spec_target": 0.9,
+    "spline_knots": 5,
+    "tune_ck_base": 24,
+    "tune_folds": 3,
+    "tune_mlp_configs": 32,
+    "tune_tree_configs": 16,
+    "val_frac": 0.15,
+    "viol_tol": 0.001,
+    "weight_clip": [
+      0.1,
+      10.0
+    ],
+    "winsor": [
+      0.5,
+      99.5
+    ]
+  },
+  "inputs": {
+    "NAGALA": {
+      "file": "DatasetIntJObesity.xlsx",
+      "sha256": "671359aea2019c848f969395f88e57f888eaba8463ea0351bcda8f1c947f5523"
+    },
+    "RICH": {
+      "file": "RCHealthCareData-20180820.xlsx",
+      "sha256": "ffd341a1a91ac65585b9fba70847a2681f5671a6035d9cfbf92e50795d74fbf6"
+    },
+    "NHANES": {
+      "file": "nhanes_t2d_extract.csv",
+      "sha256": "d39795db4a687cd5c37e7eb1e85ac8850f78192f031d0dcf3887e413f976899f"
+    }
+  },
+  "environment": {
+    "python": "3.12.3",
+    "numpy": "2.5.4",
+    "pandas": "2.2.3",
+    "torch": "2.15.0+cu132",
+    "sklearn": "1.9.1",
+    "xgboost": "3.4.1",
+    "lightgbm": "4.6.0",
+    "scipy": "1.16.3",
+    "matplotlib": "3.11.2",
+    "platform": "Linux-6.18.44-fc-v726-x86_64-with-glibc2.39"
+  },
+  "workers": 4,
+  "wall_seconds": 1648.2635539849998,
+  "chosen_hyperparameters": {
+    "NAGALA|GAM": {
+      "C": 0.1
+    },
+    "NAGALA|LGBM": {
+      "learning_rate": 0.03,
+      "n_estimators": 150,
+      "num_leaves": 7
+    },
+    "NAGALA|LGBM_mono": {
+      "learning_rate": 0.03,
+      "n_estimators": 150,
+      "num_leaves": 7
+    },
+    "NAGALA|LR": {
+      "C": 1.0
+    },
+    "NAGALA|M1": {
+      "dropout": 0.3,
+      "enc_dim": 16,
+      "hidden": [
+        256,
+        128
+      ],
+      "lr": 0.001,
+      "weight_decay": 0.0001
+    },
+    "NAGALA|M2": {
+      "dropout": 0.2,
+      "enc_dim": 16,
+      "hidden": [
+        256,
+        128
+      ],
+      "lr": 0.003,
+      "weight_decay": 0.001
+    },
+    "NAGALA|RF": {
+      "max_depth": 6,
+      "min_samples_leaf": 50
+    },
+    "NAGALA|XGB": {
+      "learning_rate": 0.03,
+      "max_depth": 2,
+      "n_estimators": 300
+    },
+    "NAGALA|XGB_mono": {
+      "learning_rate": 0.03,
+      "max_depth": 4,
+      "n_estimators": 150
+    },
+    "NAGALA|cLR": {
+      "C": 1.0
+    },
+    "NAGALA|CKINN": {
+      "dropout": 0.2,
+      "enc_dim": 16,
+      "hidden": [
+        256,
+        128
+      ],
+      "lr": 0.003,
+      "weight_decay": 0.001
+    },
+    "RICH|GAM": {
+      "C": 1.0
+    },
+    "RICH|LGBM": {
+      "learning_rate": 0.03,
+      "n_estimators": 150,
+      "num_leaves": 7
+    },
+    "RICH|LGBM_mono": {
+      "learning_rate": 0.03,
+      "n_estimators": 150,
+      "num_leaves": 7
+    },
+    "RICH|LR": {
+      "C": 0.1
+    },
+    "RICH|M1": {
+      "dropout": 0.3,
+      "enc_dim": 16,
+      "hidden": [
+        64,
+        32
+      ],
+      "lr": 0.003,
+      "weight_decay": 0.001
+    },
+    "RICH|M2": {
+      "dropout": 0.1,
+      "enc_dim": 32,
+      "hidden": [
+        256,
+        128
+      ],
+      "lr": 0.003,
+      "weight_decay": 0.001
+    },
+    "RICH|RF": {
+      "max_depth": 6,
+      "min_samples_leaf": 50
+    },
+    "RICH|XGB": {
+      "learning_rate": 0.05,
+      "max_depth": 2,
+      "n_estimators": 150
+    },
+    "RICH|XGB_mono": {
+      "learning_rate": 0.03,
+      "max_depth": 2,
+      "n_estimators": 150
+    },
+    "RICH|cLR": {
+      "C": 0.1
+    },
+    "RICH|CKINN": {
+      "dropout": 0.1,
+      "enc_dim": 32,
+      "hidden": [
+        256,
+        128
+      ],
+      "lr": 0.003,
+      "weight_decay": 0.001
+    },
+    "NHANES|GAM": {
+      "C": 0.1
+    },
+    "NHANES|LGBM": {
+      "learning_rate": 0.03,
+      "n_estimators": 150,
+      "num_leaves": 7
+    },
+    "NHANES|LGBM_mono": {
+      "learning_rate": 0.03,
+      "n_estimators": 150,
+      "num_leaves": 7
+    },
+    "NHANES|LR": {
+      "C": 0.1
+    },
+    "NHANES|M1": {
+      "dropout": 0.3,
+      "enc_dim": 32,
+      "hidden": [
+        64,
+        32
+      ],
+      "lr": 0.001,
+      "weight_decay": 0.001
+    },
+    "NHANES|M2": {
+      "dropout": 0.2,
+      "enc_dim": 32,
+      "hidden": [
+        128,
+        64
+      ],
+      "lr": 0.001,
+      "weight_decay": 0.001
+    },
+    "NHANES|RF": {
+      "max_depth": 14,
+      "min_samples_leaf": 20
+    },
+    "NHANES|XGB": {
+      "learning_rate": 0.03,
+      "max_depth": 2,
+      "n_estimators": 150
+    },
+    "NHANES|XGB_mono": {
+      "learning_rate": 0.03,
+      "max_depth": 2,
+      "n_estimators": 150
+    },
+    "NHANES|cLR": {
+      "C": 0.1
+    },
+    "NHANES|CKINN": {
+      "dropout": 0.2,
+      "enc_dim": 32,
+      "hidden": [
+        128,
+        64
+      ],
+      "lr": 0.001,
+      "weight_decay": 0.001
+    },
+    "NHANESv1|LR": {
+      "C": 0.1
+    },
+    "NHANESv1|cLR": {
+      "C": 0.1
+    },
+    "NHANESv1|GAM": {
+      "C": 0.1
+    },
+    "NHANESv1|RF": {
+      "max_depth": 14,
+      "min_samples_leaf": 20
+    },
+    "NHANESv1|XGB": {
+      "learning_rate": 0.03,
+      "max_depth": 2,
+      "n_estimators": 150
+    },
+    "NHANESv1|XGB_mono": {
+      "learning_rate": 0.03,
+      "max_depth": 2,
+      "n_estimators": 150
+    },
+    "NHANESv1|LGBM": {
+      "learning_rate": 0.03,
+      "n_estimators": 150,
+      "num_leaves": 7
+    },
+    "NHANESv1|LGBM_mono": {
+      "learning_rate": 0.03,
+      "n_estimators": 150,
+      "num_leaves": 7
+    },
+    "NHANESv1|M1": {
+      "dropout": 0.3,
+      "enc_dim": 32,
+      "hidden": [
+        64,
+        32
+      ],
+      "lr": 0.001,
+      "weight_decay": 0.001
+    },
+    "NHANESv1|M2": {
+      "dropout": 0.2,
+      "enc_dim": 32,
+      "hidden": [
+        128,
+        64
+      ],
+      "lr": 0.001,
+      "weight_decay": 0.001
+    },
+    "NHANESv1|CKINN": {
+      "dropout": 0.2,
+      "enc_dim": 32,
+      "hidden": [
+        128,
+        64
+      ],
+      "lr": 0.001,
+      "weight_decay": 0.001
+    }
+  },
+  "chosen_lambda": {
+    "NAGALA|T2": 100.0,
+    "RICH|T2": 100.0,
+    "NHANES|T2": 100.0,
+    "NAGALA|T3": 100.0,
+    "RICH|T3": 100.0,
+    "NHANESv1|T2": 100.0
+  },
+  "verdicts": [
+    {
+      "family": "A: CKINN-M2",
+      "hypothesis": "H1",
+      "units": 3,
+      "units_predicted": 3,
+      "units_opposite": 0,
+      "verdict": "PASS"
+    },
+    {
+      "family": "A: CKINN-M2",
+      "hypothesis": "H2",
+      "units": 3,
+      "units_predicted": 0,
+      "units_opposite": 0,
+      "verdict": "NULL"
+    },
+    {
+      "family": "A: CKINN-M2",
+      "hypothesis": "H3",
+      "units": 2,
+      "units_predicted": 1,
+      "units_opposite": 1,
+      "verdict": "NULL"
+    },
+    {
+      "family": "A: CKINN-M2",
+      "hypothesis": "H4",
+      "units": 3,
+      "units_predicted": 3,
+      "units_opposite": 0,
+      "verdict": "PASS"
+    },
+    {
+      "family": "A: CKINN-M2",
+      "hypothesis": "H5",
+      "units": 3,
+      "units_predicted": 0,
+      "units_opposite": 0,
+      "verdict": "NULL"
+    },
+    {
+      "family": "B: CKINN-M1",
+      "hypothesis": "H1",
+      "units": 3,
+      "units_predicted": 3,
+      "units_opposite": 0,
+      "verdict": "PASS"
+    },
+    {
+      "family": "B: CKINN-M1",
+      "hypothesis": "H2",
+      "units": 3,
+      "units_predicted": 0,
+      "units_opposite": 0,
+      "verdict": "NULL"
+    },
+    {
+      "family": "B: CKINN-M1",
+      "hypothesis": "H3",
+      "units": 2,
+      "units_predicted": 1,
+      "units_opposite": 1,
+      "verdict": "NULL"
+    },
+    {
+      "family": "B: CKINN-M1",
+      "hypothesis": "H4",
+      "units": 3,
+      "units_predicted": 2,
+      "units_opposite": 1,
+      "verdict": "NULL"
+    },
+    {
+      "family": "B: CKINN-M1",
+      "hypothesis": "H5",
+      "units": 3,
+      "units_predicted": 0,
+      "units_opposite": 0,
+      "verdict": "NULL"
+    }
+  ],
+  "held_out_sites": [
+    "2",
+    "3",
+    "4",
+    "5",
+    "7",
+    "8",
+    "9",
+    "11"
+  ],
+  "shared_predictors": [
+    "age_years",
+    "sex_female",
+    "bmi_kgm2",
+    "sbp_mmHg",
+    "dbp_mmHg",
+    "tg_mmol",
+    "hdl_mmol",
+    "tc_mmol",
+    "alt_u_l",
+    "ast_u_l"
+  ],
+  "library_sha256": {
+    "__init__.py": "f744bda01b3cc980bd829cea7773ef7b8a34268d4daf3536f0aeafac1371963b",
+    "analysis.py": "ec758a7d47288e8441525706300d8b459901505ebed4a67866021b68032e6843",
+    "config.py": "ef740a239f59b8f67b2382b9bf8434dd23d2ea09ba3045dbd3e9b405d0547be5",
+    "data.py": "2381f9bbebba28d9fb75092f7f247359637a0510f419c3e9b11e2c63572ea56e",
+    "engine.py": "a7efffe2deea49057b7ed9884f20a79d78f220aaddf4d6f6a20fd52d670bf9a1",
+    "metrics.py": "6f176140e243a7037dd92a33b32256167fedec6477c9691e9478ef9361bba936",
+    "missing.py": "235968a977cdff84f6040e2c58737aeaaf578409792f8f8513d1733af0666b6c",
+    "models.py": "7f6c6566add418e18c9ed97f2602c6ff8e62aedf32cd65d9ae6bc662c27b26fc",
+    "nets.py": "09caeb2e290424345d52cd49b1eaa32604c37d3a55ed112fa160c8aca25e4eea",
+    "plan.py": "73674d27b44c732f737681a2f47049d98bc7384b894fe7180bb03a48c77f9ebd",
+    "prep.py": "1bd045963211b96be7c5a202c445390b7e8a2cf980f973ccf300dc8ddbf140a7"
+  }
+}

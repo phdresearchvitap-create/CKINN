@@ -1,0 +1,31 @@
+cohort,model,region,violation_rate,share_sparse
+NAGALA,CKINN,held-out random rows,0.0036006172,
+NAGALA,CKINN,held-out sparse rows,0.005751093,0.050193986420950534
+NAGALA,M1,held-out random rows,0.10370349,
+NAGALA,M1,held-out sparse rows,0.12606396,0.050193986420950534
+NAGALA,M2,held-out random rows,0.10287478,
+NAGALA,M2,held-out sparse rows,0.12238325,0.050193986420950534
+NAGALA-trained,CKINN,other cohort (RICH),0.0015432099,
+NAGALA-trained,CKINN,source (NAGALA),0.00032012805,
+NAGALA-trained,M1,other cohort (RICH),0.1877425,
+NAGALA-trained,M1,source (NAGALA),0.16634654,
+NAGALA-trained,M2,other cohort (RICH),0.15983245,
+NAGALA-trained,M2,source (NAGALA),0.1432173,
+NHANES,CKINN,held-out random rows,0.00047786368,
+NHANES,CKINN,held-out sparse rows,0.0013078112,0.0499829989799388
+NHANES,M1,held-out random rows,0.013661279,
+NHANES,M1,held-out sparse rows,0.01605041,0.0499829989799388
+NHANES,M2,held-out random rows,0.012424455,
+NHANES,M2,held-out sparse rows,0.013672572,0.0499829989799388
+RICH,CKINN,held-out random rows,3.6200407e-05,
+RICH,CKINN,held-out sparse rows,0.00035640458,0.04998613299344415
+RICH,M1,held-out random rows,0.058463655,
+RICH,M1,held-out sparse rows,0.066968426,0.04998613299344415
+RICH,M2,held-out random rows,0.04887055,
+RICH,M2,held-out sparse rows,0.054102216,0.04998613299344415
+RICH-trained,CKINN,other cohort (NAGALA),0.0008803521,
+RICH-trained,CKINN,source (RICH),0.00044091707,
+RICH-trained,M1,other cohort (NAGALA),0.10544218,
+RICH-trained,M1,source (RICH),0.062301587,
+RICH-trained,M2,other cohort (NAGALA),0.11176471,
+RICH-trained,M2,source (RICH),0.075661376,

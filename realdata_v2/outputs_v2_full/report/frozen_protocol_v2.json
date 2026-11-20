@@ -1,0 +1,101 @@
+{
+ "config": {
+  "alpha": 0.05,
+  "aug_prob": 0.5,
+  "batch": 1024,
+  "dca_a": [
+   0.01,
+   0.2,
+   0.01
+  ],
+  "dca_b": [
+   0.005,
+   0.1,
+   0.005
+  ],
+  "dev_frac": 0.2,
+  "dev_max_rows": 20000,
+  "fpr_matched": 0.1,
+  "horizon": 3.0,
+  "ig_steps": 32,
+  "lam_grid": [
+   0.03,
+   0.1,
+   0.3,
+   1.0,
+   3.0,
+   10.0,
+   30.0,
+   100.0
+  ],
+  "lam_reps": 2,
+  "max_epochs": 40,
+  "max_rows": {
+   "NAGALA": 0,
+   "NHANES": 0,
+   "RICH": 0
+  },
+  "mi_iter": 10,
+  "mi_m": 5,
+  "min_group_events": 20,
+  "miss_mechs": [
+   "mcar",
+   "mar",
+   "mnar"
+  ],
+  "miss_rates": [
+   0.1,
+   0.3,
+   0.5
+  ],
+  "mode": "full",
+  "n_boot": 2000,
+  "n_boot_band": 200,
+  "n_boot_desc": 500,
+  "n_explain": 1000,
+  "n_pd_rows": 500,
+  "n_repeats": 5,
+  "n_seeds": 5,
+  "n_splits": 5,
+  "nagala_horizon2": 5.0,
+  "nb_points_a": [
+   0.05,
+   0.1
+  ],
+  "nb_points_b": [
+   0.02,
+   0.05
+  ],
+  "ni_margin": 0.01,
+  "p_feat_drop": 0.1,
+  "p_panel_drop": 0.3,
+  "patience": 4,
+  "primary_miss": [
+   "mcar",
+   0.3
+  ],
+  "recal_n": 1000,
+  "rf_trees": 200,
+  "seed": 20261120,
+  "sens_target": 0.8,
+  "site_min_events": 100,
+  "sparse_quantile": 0.95,
+  "spec_target": 0.9,
+  "spline_knots": 5,
+  "tune_ck_base": 24,
+  "tune_folds": 3,
+  "tune_mlp_configs": 32,
+  "tune_tree_configs": 16,
+  "val_frac": 0.15,
+  "viol_tol": 0.001,
+  "weight_clip": [
+   0.1,
+   10.0
+  ],
+  "winsor": [
+   0.5,
+   99.5
+  ]
+ },
+ "sha256": "7cdc5bdde12b17df19a15650f00f1fe693168b33f39b193219ded6d70ea0468b"
+}

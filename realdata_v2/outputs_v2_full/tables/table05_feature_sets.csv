@@ -1,0 +1,8 @@
+cohort,tier,n_features,features
+NAGALA,T2,15,"age_years, sex_female, bmi_kgm2, waist_cm, sbp_mmHg, dbp_mmHg, smoker, alcohol_level, exercise_regular, tg_mmol, hdl_mmol, tc_mmol, alt_u_l, ast_u_l, ggt_u_l"
+RICH,T2,13,"age_years, sex_female, bmi_kgm2, sbp_mmHg, dbp_mmHg, smoker, family_history_dm, tg_mmol, hdl_mmol, ldl_mmol, tc_mmol, alt_u_l, ast_u_l"
+NHANES,T2,16,"age_years, sex_female, bmi_kgm2, waist_cm, sbp_mmHg, dbp_mmHg, alcohol_level, exercise_regular, family_history_dm, tg_mmol, hdl_mmol, ldl_mmol, tc_mmol, alt_u_l, ast_u_l, ggt_u_l"
+NAGALA,T3,17,"age_years, sex_female, bmi_kgm2, waist_cm, sbp_mmHg, dbp_mmHg, smoker, alcohol_level, exercise_regular, tg_mmol, hdl_mmol, tc_mmol, alt_u_l, ast_u_l, ggt_u_l, fpg_mmol, hba1c_pct"
+RICH,T3,14,"age_years, sex_female, bmi_kgm2, sbp_mmHg, dbp_mmHg, smoker, family_history_dm, tg_mmol, hdl_mmol, ldl_mmol, tc_mmol, alt_u_l, ast_u_l, fpg_mmol"
+NHANESv1,T2,16,"age_years, sex_female, bmi_kgm2, waist_cm, sbp_mmHg, dbp_mmHg, alcohol_level, exercise_regular, family_history_dm, tg_mmol, hdl_mmol, ldl_mmol, tc_mmol, alt_u_l, ast_u_l, ggt_u_l"
+NAGALA+RICH,shared (transport),10,"age_years, sex_female, bmi_kgm2, sbp_mmHg, dbp_mmHg, tg_mmol, hdl_mmol, tc_mmol, alt_u_l, ast_u_l"
