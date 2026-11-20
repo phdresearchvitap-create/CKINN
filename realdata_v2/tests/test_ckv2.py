@@ -246,3 +246,10 @@ def test_ckinn_lambda0_equals_m2_and_penalty_changes_fit():
     c1 = Fitted("CKINN", feats, hp, 5, CFG, signs=SIGNS_T2, lam=10.0).fit(d, y)
     assert np.array_equal(m2.predict(d), c0.predict(d))
     assert not np.array_equal(m2.predict(d), c1.predict(d)) and max(c1.hist["pen"]) > 0
+
+
+def test_classify_interval_both_signs():
+    from ckv2.analysis import classify_interval
+    assert classify_interval(1, 0.1, 0.3) == "supported" and classify_interval(1, -0.3, -0.1) == "contradicted"
+    assert classify_interval(-1, -0.3, -0.1) == "supported" and classify_interval(-1, 0.1, 0.3) == "contradicted"
+    assert classify_interval(-1, -0.07, 0.03) == "uncertain" and classify_interval(1, -0.07, 0.03) == "uncertain"

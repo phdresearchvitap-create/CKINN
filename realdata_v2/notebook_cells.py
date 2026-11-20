@@ -898,11 +898,12 @@ for ax, (fam, g) in zip(axs, _pr.groupby("family")):
     ax.set_yticks(range(len(g)))
     ax.set_yticklabels([f"{h} {u.replace(' (T2)', '')}: {SHORT.get(e, e)}" for h, u, e in zip(g.hypothesis, g.unit, g.endpoint)], fontsize=6)
     ax.set_title(fam, fontsize=8)
-    ax.set_xlabel("standardised difference (right = predicted direction)")
+    ax.set_xscale("symlog", linthresh=2)
+    ax.set_xlabel("difference / bootstrap SD, symmetric log scale\n(right = predicted direction; H1 measured from the -0.01 margin)")
 axs[0].invert_yaxis()
 from matplotlib.patches import Patch
-axs[1].legend(handles=[Patch(color=COL["CKINN"], label="predicted (Holm)"), Patch(color="#9b9a95", label="null"),
-                       Patch(color="#e34948", label="opposite (Holm)")], fontsize=6, loc="lower right")
+fig.legend(handles=[Patch(color=COL["CKINN"], label="predicted (Holm)"), Patch(color="#9b9a95", label="null"),
+                    Patch(color="#e34948", label="opposite (Holm)")], fontsize=7, loc="lower center", ncol=3, bbox_to_anchor=(0.5, -0.06))
 savefig(fig, "fig1_hypothesis_endpoints")
 # Figure 2: reliability curves with bands
 fig, axs = plt.subplots(1, 3, figsize=(10, 3.2))
@@ -963,7 +964,7 @@ for i, c in enumerate(COHORTS):
     ax.plot([i + 0.3], [BOOT_FAM[c]["point"][("CKINN", "auroc")] - BOOT_FAM[c]["point"][("M2", "auroc")]], marker="D", ms=4, color="#0b0b0b",
             label="run average, 95% bootstrap interval" if i == 0 else None)
 ax.axhline(0, color="#9b9a95", lw=0.8)
-ax.axhline(-CFG.ni_margin, color="#9b9a95", lw=0.8, ls=":")
+ax.axhline(-CFG.ni_margin, color="#9b9a95", lw=0.8, ls=":", label="non-inferiority margin")
 ax.set_xticks(range(len(COHORTS)))
 ax.set_xticklabels(COHORTS)
 ax.set_ylabel("AUROC, CKINN minus M2")

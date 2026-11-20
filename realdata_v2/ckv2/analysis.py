@@ -254,6 +254,12 @@ def fold_aurocs(y, p, fold) -> np.ndarray:
     return np.array([mt.auroc_w(mt.Ranked(p[fold == k], y[fold == k])) for k in np.unique(fold)])
 
 
+def classify_interval(sign: int, lo: float, hi: float) -> str:
+    """'supported' if the whole interval lies on the prior's side of zero, 'contradicted' if wholly on the other side."""
+    lo_s, hi_s = sorted((sign * lo, sign * hi))
+    return "supported" if lo_s > 0 else "contradicted" if hi_s < 0 else "uncertain"
+
+
 def empirical_signs(fr: pd.DataFrame, feats: Sequence[str], signs: Dict[str, int]) -> pd.DataFrame:
     """Adjusted logistic regression on the evaluation rows (descriptive, protocol 8c): Wald 95% intervals on the standardised scale;
     and the Spearman correlation between quintile index and observed event rate."""
@@ -280,7 +286,7 @@ def empirical_signs(fr: pd.DataFrame, feats: Sequence[str], signs: Dict[str, int
         else:
             rate = fr.loc[obs].groupby(f).y.mean()
             rho = float(np.sign(rate.iloc[-1] - rate.iloc[0])) if len(rate) > 1 else np.nan
-        cat = "supported" if s * lo > 0 else "contradicted" if s * hi < 0 else "uncertain"
+        cat = classify_interval(s, lo, hi)
         rows.append({"feature": f, "prior_sign": s, "adjusted_coef": b, "coef_lo": lo, "coef_hi": hi, "adjusted_evidence": cat,
                      "quintile_spearman": rho, "quintile_agrees": bool(np.sign(rho) == s) if np.isfinite(rho) else None})
     return pd.DataFrame(rows)
