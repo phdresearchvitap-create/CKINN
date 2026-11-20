@@ -136,8 +136,9 @@ for k, t in TASK.items():
     key = "NHANES" if k == "NHANESv1" else k                      # v1 split seed
     DEV[k], EVAL[k] = D.dev_eval_split(t, key, CFG.dev_frac)
     DEV_ROWS[k] = set(DEV[k].raw_row)
-    if k == "NHANESv1":                                           # sensitivity frame: drop rows used to tune the NHANES models
+    if k == "NHANESv1":                                           # sensitivity frame: drop rows used to tune the NHANES models,
         EVAL[k] = t[~t.raw_row.isin(DEV_ROWS["NHANES"])].reset_index(drop=True)
+        DEV[k], DEV_ROWS[k] = DEV["NHANES"], DEV_ROWS["NHANES"]   # whose tuned configurations it reuses
     DEV[k] = D.subsample(DEV[k], CFG.max_rows.get(key, 0) // 4, "dev" + k)
     EVAL[k] = D.subsample(EVAL[k], CFG.max_rows.get(key, 0), "eval" + k)
     DEV[k] = D.cap_rows(DEV[k], CFG.dev_max_rows, key)
