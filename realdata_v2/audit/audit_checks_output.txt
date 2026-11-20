@@ -41,7 +41,7 @@ C7 baseline FPG >= 7.0: 0; final-visit FPG >= 7.0 without an event: 0
 D1 rows 101316; rows per SDDSRVYR code: {-1: 33994, 1: 2126, 2: 2389, 3: 9147, 4: 3151, 5: 2393, 6: 8960, 7: 9756, 8: 10175, 9: 9971, 10: 9254}
 D2 adults 20+ in cycles 1-10 (v1 frame): 37522; adults with code -1 excluded by v1: 18825
 D3 v1 labelled 29698, positives 1432
-D4 v1-labelled adults taking insulin or diabetes pills without a reported diagnosis: 263, of whom positive 119
+D4 v1-labelled adults taking insulin or diabetes pills without a reported diagnosis: 263, of whom positive 119 (8.3% of v1 positives)
 D5 v1-labelled adults with DIQ010 refused/don't know/missing: 23
 D6 fasting glucose values 16440; with fasting time < 8 h: 1097; v1 positives resting only on such a glucose: 69
 D7 corrected definition (v2): labelled 29410, positives 1241, prevalence 4.22%

@@ -83,7 +83,8 @@ fpg_v1 = ad.LBXGLU / 18.016
 lab_v1 = (fpg_v1.fillna(-1) >= 7.0) | (ad.LBXGH.fillna(-1) >= 6.5)
 keep_v1 = ~known & (fpg_v1.notna() | ad.LBXGH.notna())
 P(f"D3 v1 labelled {int(keep_v1.sum())}, positives {int((lab_v1 & keep_v1).sum())}")
-P(f"D4 v1-labelled adults taking insulin or diabetes pills without a reported diagnosis: {int((keep_v1 & med).sum())}, of whom positive {int((keep_v1 & med & lab_v1).sum())}")
+P(f"D4 v1-labelled adults taking insulin or diabetes pills without a reported diagnosis: {int((keep_v1 & med).sum())}, of whom positive {int((keep_v1 & med & lab_v1).sum())} "
+  f"({100 * (keep_v1 & med & lab_v1).sum() / (lab_v1 & keep_v1).sum():.1f}% of v1 positives)")
 P(f"D5 v1-labelled adults with DIQ010 refused/don't know/missing: {int((keep_v1 & unk).sum())}")
 g = ad.LBXGLU.notna()
 P(f"D6 fasting glucose values {int(g.sum())}; with fasting time < 8 h: {int((g & (ad.PHAFSTHR < 8)).sum())}; v1 positives resting only on such a glucose: {int((keep_v1 & (fpg_v1 >= 7) & (ad.PHAFSTHR < 8) & ~(ad.LBXGH >= 6.5)).sum())}")

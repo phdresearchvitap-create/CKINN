@@ -111,4 +111,4 @@ Configuration hash (sha256 of the canonical JSON of the full-mode configuration,
 
 ## 10. Changes after the freeze
 
-None.
+- 2026-11-20, while the full run was in progress and before any full-mode result had been seen. Clarification, not a change: the fairness-weighted CKINN of v1 (`CKINN_fair`) is not part of v2; the amendment table omitted it by oversight (it should appear beside the RBF SVM in A13). Its v1 results remain in the v1 record. The configuration hash is unaffected.
