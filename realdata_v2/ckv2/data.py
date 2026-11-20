@@ -130,7 +130,9 @@ def load_nhanes(raw: pd.DataFrame) -> pd.DataFrame:
 
 
 def task_frame(d: pd.DataFrame, label_col: str = "label") -> pd.DataFrame:
-    t = d[d[label_col].notna()].reset_index(drop=True).copy()
+    t = d[d[label_col].notna()].copy()
+    t["raw_row"] = t.index.to_numpy()                       # row identity in the harmonised frame (used to keep splits disjoint)
+    t = t.reset_index(drop=True)
     t["age_band"] = np.where(t.age_years < 40, "20-39", np.where(t.age_years < 60, "40-59", "60+"))
     t["sex"] = np.where(t.sex_female == 1, "female", "male")
     t["y"] = t[label_col].astype(int)

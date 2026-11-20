@@ -86,6 +86,8 @@ def _stat(name: str, v: _Vec, y, w, payload) -> float:
     if name in ("tpr_sex_gap", "tpr_age_range"):
         gn = "sex" if name == "tpr_sex_gap" else "age"
         vals = [mt.tpr_at_fpr_w(r, payload["fpr"], None if w is None else w[ix]) for ix, r in v.g[gn]]
+        if len(vals) < 2:
+            return float("nan")
         return float(abs(vals[0] - vals[1])) if gn == "sex" else float(max(vals) - min(vals))
     if name.startswith("gap_"):
         vals = []
@@ -180,6 +182,8 @@ def ci(draws: np.ndarray) -> Tuple[float, float]:
 # ================================================================== hypothesis families
 def groups_for(fr: pd.DataFrame, y: np.ndarray, min_events: int):
     sex = [np.flatnonzero(fr.sex_female.to_numpy() == 1), np.flatnonzero(fr.sex_female.to_numpy() == 0)]
+    if any(y[ix].sum() < min_events or (y[ix] == 0).sum() < min_events for ix in sex):
+        sex = []                                             # protocol 7: groups need at least min_events events
     bands = []
     for b in ("20-39", "40-59", "60+"):
         ix = np.flatnonzero(fr.age_band.to_numpy() == b)

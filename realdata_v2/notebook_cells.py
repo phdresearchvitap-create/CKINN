@@ -131,15 +131,21 @@ NH_LABEL = pd.DataFrame([{"definition": "v1 (no reported diagnosis)", "labelled"
                           "positives": int(np.nansum(_nh.label))}])
 TASK = {k: D.task_frame(d) for k, d in RAW.items()}
 TASK["NHANESv1"] = D.task_frame(RAW["NHANES"], "label_v1")
-DEV, EVAL = {}, {}
+DEV, EVAL, DEV_ROWS = {}, {}, {}
 for k, t in TASK.items():
     key = "NHANES" if k == "NHANESv1" else k                      # v1 split seed
     DEV[k], EVAL[k] = D.dev_eval_split(t, key, CFG.dev_frac)
+    DEV_ROWS[k] = set(DEV[k].raw_row)
+    if k == "NHANESv1":                                           # sensitivity frame: drop rows used to tune the NHANES models
+        EVAL[k] = t[~t.raw_row.isin(DEV_ROWS["NHANES"])].reset_index(drop=True)
     DEV[k] = D.subsample(DEV[k], CFG.max_rows.get(key, 0) // 4, "dev" + k)
     EVAL[k] = D.subsample(EVAL[k], CFG.max_rows.get(key, 0), "eval" + k)
     DEV[k] = D.cap_rows(DEV[k], CFG.dev_max_rows, key)
 SPLIT = pd.DataFrame([{"cohort": k, "dev_rows": len(DEV[k]), "dev_events": int(DEV[k].y.sum()), "eval_rows": len(EVAL[k]),
                        "eval_events": int(EVAL[k].y.sum())} for k in TASK])
+assert not (set(EVAL["NHANESv1"].raw_row) & DEV_ROWS["NHANES"]), "NHANES tuning rows must not be evaluated in the v1-label analysis"
+for k in ("NAGALA", "RICH", "NHANES"):
+    assert not (set(EVAL[k].raw_row) & DEV_ROWS[k]), f"{k}: development rows in the evaluation subset"
 FEATS = {(k, "T2"): D.features_for(TASK[k], "T2") for k in ("NAGALA", "RICH", "NHANES")}
 FEATS.update({(k, "T3"): D.features_for(TASK[k], "T3") for k in ("NAGALA", "RICH")})
 FEATS[("NHANESv1", "T2")] = FEATS[("NHANES", "T2")]
@@ -200,6 +206,9 @@ LAMBDAS.to_csv(OUT / "tables" / "table07_lambda.csv", index=False)
 print(TUNING[TUNING.chosen].drop(columns=["chosen"]).round(4).to_string(index=False))
 print(LAMBDAS.round(5).to_string(index=False))
 assert set(LAMBDAS.groupby(["cohort", "tier"]).chosen.sum()) == {1}
+HP_SHARED = {c: HP[(c, "CKINN")] == HP[(c, "M2")] for c in ("NAGALA", "RICH", "NHANES")}
+pd.DataFrame([{"cohort": c, "ckinn_uses_m2_configuration": v} for c, v in HP_SHARED.items()]).to_csv(OUT / "tables" / "table07b_ckinn_m2_configuration.csv", index=False)
+print("CKINN uses the same network configuration as M2 (so family A isolates the penalty):", HP_SHARED)
 print(f"CELL 18 OK | tuning done on development rows only | {time.perf_counter() - _t0:.0f}s")
 
 # %%
@@ -223,7 +232,7 @@ _nofh = [f for f in FEATS[("RICH", "T2")] if f != "family_history_dm"]
 NOFH_SPECS = PL.cv_specs("RICH", "T2", FOLDS["RICH"], _nofh, HP, LAM, CFG, models=("LR", "M2", "CKINN"), repeats=[0], variant="noFH",
                          scen=False, extras=False)
 NHV1_SPECS = PL.cv_specs("NHANESv1", "T2", FOLDS["NHANESv1"], FEATS[("NHANESv1", "T2")], HP, LAM, CFG, models=("LR", "M2", "CKINN"),
-                         repeats=[0], scen=False, extras=False)
+                         repeats=[0], variant="nodevoverlap", scen=False, extras=False)
 IPCW_SPECS = {c: PL.ipcw_specs(c, FOLDS[c], FEATS[(c, "T2")], HP, LAM, CFG, EVAL[c]) for c in ("NAGALA", "RICH")}
 _all = [s for v in VAR_SPECS.values() for s in v] + [s for v in T3_SPECS.values() for s in v] + NOFH_SPECS + NHV1_SPECS + \
        [s for v in IPCW_SPECS.values() for s in v]
@@ -361,7 +370,8 @@ for fam, F in (("A: CKINN-M2", "M2"), ("B: CKINN-M1", "M1")):
         EP.append(AN.endpoint_row(fam, "H4", u, "across-seed attribution agreement (Spearman)", "higher",
                                   float(np.nanmean(s_ck) - np.nanmean(s_f)), STAB_DRAWS[c]["CKINN"] - STAB_DRAWS[c][F],
                                   note=f"{len(s_ck)} explained rows, {CFG.n_seeds} seeds"))
-        EP.append(AN.endpoint_row(fam, "H5", u, "sex gap in sensitivity at FPR 0.10", "lower", *d("tpr_sex_gap")))
+        if len(GROUPS[c]["sex"]) == 2:
+            EP.append(AN.endpoint_row(fam, "H5", u, "sex gap in sensitivity at FPR 0.10", "lower", *d("tpr_sex_gap")))
         if N_BANDS[c] >= 2:
             EP.append(AN.endpoint_row(fam, "H5", u, "age-band range in sensitivity at FPR 0.10", "lower", *d("tpr_age_range"),
                                       note=f"{N_BANDS[c]} age bands with >= {CFG.min_group_events} events"))
@@ -1064,7 +1074,8 @@ _x = T["table11_h1_crosschecks"]
 _mde = _x[(_x.cohort == "NAGALA") & (_x.family.str.startswith("A"))].iloc[0]
 mde_line = (f"For NAGALA, the bootstrap standard deviation of the CKINN minus M2 AUROC difference was {_mde.boot_sd:.4f}, so the difference detectable with "
             f"80% power at two-sided 5% is {_mde.mde_80pct_power:.4f}, and the power of the non-inferiority test (margin {CFG.ni_margin}) if the true "
-            f"difference were zero is {_mde.power_noninferiority_if_true_diff_0:.3f}.")
+            f"difference were zero is {_mde.power_noninferiority_if_true_diff_0:.3f}. Both ignore the Holm correction and the variability of model "
+            f"training, so they overstate the power of the actual decision.")
 _sens_cols = ["cohort", "model", "runs", "events", "auroc", "auroc_lo", "auroc_hi", "auprc", "brier", "scaled_brier", "slope", "citl", "ece"]
 _dc0 = T["table01_data_card"].set_index("cohort")
 LIMITS = [
@@ -1082,6 +1093,12 @@ LIMITS = [
     "are not evidence of clinical validity. Agreement with clinical priors is not proof that a model is causally correct.",
     "Subgroup gaps at one common threshold reflect differences in risk between groups; sensitivity at matched specificity isolates ranking within "
     "groups but subgroups with few events have wide intervals.",
+    "A 'seed' changes the network initialisation, the inner validation split and the batch order together, so the seed variance component "
+    "includes inner-split variance. M1, which has no augmentation, sees its mini-batches in a different order from M2 and CKINN after the first epoch.",
+    "Lambda was chosen at the top of the pre-declared grid in every cohort and tier: the development score barely changed across the grid and the "
+    "declared rule takes the largest lambda within one standard error, so CKINN here is a strongly constrained network.",
+    "Bootstrap intervals hold the fitted models fixed; the corrected repeated-CV t-test, which allows for training variability, gives wider intervals. "
+    "Intervals for the IPCW time-dependent AUROC hold the censoring distribution fixed.",
     "Outputs are risk estimates from retrospective research data; they are not diagnoses and have not been validated for clinical use.",
 ]
 REPORT = f"""# CKINN versus M1 and M2 on real data, version 2: results report (generated)

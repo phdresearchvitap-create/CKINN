@@ -253,3 +253,55 @@ def test_classify_interval_both_signs():
     assert classify_interval(1, 0.1, 0.3) == "supported" and classify_interval(1, -0.3, -0.1) == "contradicted"
     assert classify_interval(-1, -0.3, -0.1) == "supported" and classify_interval(-1, 0.1, 0.3) == "contradicted"
     assert classify_interval(-1, -0.07, 0.03) == "uncertain" and classify_interval(1, -0.07, 0.03) == "uncertain"
+
+
+def test_select_lambda_one_se_rule():
+    from ckv2.plan import select_lambda
+    rows = []
+    for lam, base in ((0.0, 0.100), (0.1, 0.1001), (1.0, 0.1004), (10.0, 0.120)):
+        rows += [{"lam": lam, "score": base + e} for e in (-0.001, 0.0, 0.001)]
+    lam, tab = select_lambda(pd.DataFrame(rows), (0.1, 1.0, 10.0))
+    assert lam == 1.0 and tab.chosen.sum() == 1          # 1.0 is within one SE of the best (lambda 0); 10 is not
+    rows = [{"lam": l, "score": 0.1 + (0.05 if l > 0 else 0) + e} for l in (0.0, 0.1, 1.0) for e in (-1e-4, 0, 1e-4)]
+    assert select_lambda(pd.DataFrame(rows), (0.1, 1.0))[0] == 0.1   # none qualifies: the smallest grid value
+
+
+def test_verdict_rules():
+    from ckv2.analysis import verdicts
+    def row(h, unit, p_pred, p_opp):
+        return {"family": "A", "hypothesis": h, "unit": unit, "endpoint": "e", "primary": True, "p_pred": p_pred, "p_opp": p_opp}
+    ep = pd.DataFrame([row("H1", "u1", 1e-4, 1.0), row("H1", "u2", 1e-4, 1.0), row("H1", "u3", 0.5, 0.5),
+                       row("H2", "u1", 1e-4, 1.0), row("H2", "u2", 1e-4, 1.0), row("H2", "u3", 0.5, 0.5),
+                       row("H3", "u1", 1.0, 1e-4), row("H3", "u2", 1.0, 1e-4)])
+    _, v = verdicts(ep, 0.05)
+    v = v.set_index("hypothesis").verdict
+    assert v["H1"] == "NULL" and v["H2"] == "PASS" and v["H3"] == "FAIL"
+
+
+def test_groups_for_minimum_events():
+    from ckv2.analysis import groups_for
+    n = 600
+    fr = pd.DataFrame({"sex_female": np.r_[np.ones(300), np.zeros(300)],
+                       "age_band": np.tile(["20-39", "40-59", "60+"], 200)})
+    y = np.zeros(n)
+    y[:25] = 1                                            # 25 events in women, 5 in men
+    y[300:305] = 1
+    g, nb = groups_for(fr, y, 20)
+    assert g["sex"] == [] and nb == 0
+    y[300:330] = 1
+    y[np.arange(0, 600, 3)[:30]] = 1
+    g, nb = groups_for(fr, y, 20)
+    assert len(g["sex"]) == 2 and nb >= 1
+
+
+def test_survey_replicate_weights():
+    st = np.repeat([1, 2], 40)
+    psu = np.tile(np.repeat([1, 2], 20), 2)
+    base = np.ones(80) * 2.0
+    reps = list(mt.strata_psu_weight_iter(st, psu, base, 200, 3))
+    assert all((r >= 0).all() for r in reps)
+    assert abs(np.mean([r.sum() for r in reps]) / base.sum() - 1) < 0.05
+    r0 = reps[0]
+    for s in (1, 2):
+        for p in (1, 2):
+            assert len(set(r0[(st == s) & (psu == p)])) == 1
