@@ -1,0 +1,50 @@
+== A. provenance of the v1 record ==
+A1 output files listed in output_hashes.json: 28; hash mismatches: 0
+A2 raw-data copies inside the v1 outputs archive: ['_cache_66814901-RCHealthCareData-20180820.csv', '_cache_f8adbbe9-DatasetIntJObesity.csv']
+A3 NAGALA input sha256 matches v1 manifest: True
+A3 RICH input sha256 matches v1 manifest: True
+A3 NHANES input sha256 matches v1 manifest: True
+A4 clean and executed notebooks have identical cell sources: True
+A5 error outputs in executed notebook: 0
+A6 table09 AUROC strings printed in executed notebook: 43 of 43
+A7 table10 estimates printed in executed notebook: 31 of 31
+A8 table11 'NULL' verdicts read back by pandas defaults as missing: 4 of 5
+A9 primary endpoints pooled in one Holm family: 22
+A10 'or True' in v1 code: 0; '... or None' no-op lines: 2; bare 'except Exception: pass': 1
+A11 per-model fit seed in engine includes the model name (CKINN and M2 not paired): True
+A12 training-row cap max_train_rows in frozen config: 40000
+A13 lambda chosen at the top of the grid (10): 4 of 5 cohort-tiers; largest within-cohort spread of dev scores across lambda: 0.0049
+A14 M1 described as median-imputed in markdown: True; Prep fills missing with 0 on the z-scale (training mean): True
+A15 M1 trained without augmentation while M2/CKINN use it: True; augmentation panel-drop 0.3 equals primary test MCAR rate 0.3
+A16 pooled ablation uses per-frame own statistics at prediction time (transductive): True
+
+== B. NAGALA ==
+B1 rows 15464, events 373, follow-up years min 0.45 median 5.39 max 12.96; participants followed > 11 years: 2431
+B2 sex codes in file: {0: 7034, 1: 8430} (header says 1 men, 2 women); mean ALT by code: {0: 15.05, 1: 24.11}
+B3 HDL mmol/L stored as 0: 11; of these with HDL mg/dL blank: 11
+B4 Baseline HDL-cholesterol, mg/dL / mmol column: ratio median 38.670, 1st-99th pct 38.670-38.670
+B4 Baseline Total Cholesterol, mg/dL / mmol column: ratio median 38.670, 1st-99th pct 38.670-38.670
+B4 Baseline Triglycerides, mg/dL / mmol column: ratio median 88.574, 1st-99th pct 88.574-88.574
+B4 Baseline Fasting plasma glucose, m / mmol column: ratio median 18.015, 1st-99th pct 18.015-18.015
+B5 baseline FPG >= 7.0 mmol/L: 0; baseline HbA1c >= 6.5%: 0
+
+== C. RICH ==
+C1 rows 211833, events 4174; follow-up years min 2.00 median 2.99 max 7.56; event times min 2.00
+C2 events by 3 years 1764; censored before 3 years 106055
+C3 family history 'yes' overall 0.0205; by site min 0.0000 max 0.1538; sites with yes-rate below 0.005: 5 of 15 (30053 participants)
+C4 smoking missing 0.716; drinking missing 0.716 (drinking not used by v1)
+C5 smoking missing by site ranges 0.043-0.989; HDL missing by site 0.154-0.620
+C6 exact zeros: TG 860, HDL 102, LDL 1, ALT 2, AST 1 (v1 set TG, HDL and LDL zeros to missing, kept ALT and AST zeros)
+C7 baseline FPG >= 7.0: 0; final-visit FPG >= 7.0 without an event: 0
+
+== D. NHANES extract ==
+D1 rows 101316; rows per SDDSRVYR code: {-1: 33994, 1: 2126, 2: 2389, 3: 9147, 4: 3151, 5: 2393, 6: 8960, 7: 9756, 8: 10175, 9: 9971, 10: 9254}
+D2 adults 20+ in cycles 1-10 (v1 frame): 37522; adults with code -1 excluded by v1: 18825
+D3 v1 labelled 29698, positives 1432
+D4 v1-labelled adults taking insulin or diabetes pills without a reported diagnosis: 263, of whom positive 119
+D5 v1-labelled adults with DIQ010 refused/don't know/missing: 23
+D6 fasting glucose values 16440; with fasting time < 8 h: 1097; v1 positives resting only on such a glucose: 69
+D7 corrected definition (v2): labelled 29410, positives 1241, prevalence 4.22%
+D8 survey design variables present: ['SDMVPSU', 'SDMVSTRA', 'WTMEC2YR', 'WTMEC4YR', 'WTSAF2YR']; adults with WTMEC2YR = 0: 1697
+D9 exercise (PAQ650) observed share by cycle: {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 1.0, 6: 1.0, 7: 1.0, 8: 1.0, 9: 1.0, 10: 1.0}
+D10 alcohol (ALQ101) observed share by cycle: {1: 0.85, 2: 0.86, 3: 0.86, 4: 0.88, 5: 0.88, 6: 0.86, 7: 0.84, 8: 0.88, 9: 0.87, 10: 0.0}

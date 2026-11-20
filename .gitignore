@@ -19,3 +19,7 @@ paper/main.pdf
 results/audit/
 results/gates/
 results/manifest.jsonl
+# v2 real-data study: row-level caches, predictions and run folders never go into git
+realdata_v2/outputs_v2_*/cache/
+realdata_v2/ckv2_lib/
+realdata_v2/**/__pycache__/
