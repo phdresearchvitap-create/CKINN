@@ -1,0 +1,348 @@
+====================================================================================================
+CHECK 8: sanity of saved predictions
+====================================================================================================
+NAGALA: len(y)=12372, events=298, labels binary=True
+  [MATCH] NAGALA n (len y) vs table08 n: ours=12372 stored=12372 |diff|=0 (tol 0)
+  [MATCH] NAGALA events (sum y) vs table08 events: ours=298 stored=298 |diff|=0 (tol 0)
+  [MATCH] NAGALA: 592 prediction arrays; wrong length=0, with NaN=0, outside [0,1]=0; global min=2.76e-05, max=0.8499
+  [MATCH] NAGALA: 70 fold-id arrays (58 for main runs); each is one integer fold id per row (shape (n,)), none negative/missing; bad=0; distinct fold counts per array=[5]
+     run r0s0: 14 models, identical fold partition across models=True; fold sizes=[2475, 2475, 2474, 2474, 2474] events per fold=[60, 60, 59, 59, 60]
+     run r1s1: 11 models, identical fold partition across models=True; fold sizes=[2475, 2475, 2474, 2474, 2474] events per fold=[60, 60, 59, 59, 60]
+     run r2s2: 11 models, identical fold partition across models=True; fold sizes=[2475, 2475, 2474, 2474, 2474] events per fold=[60, 60, 59, 59, 60]
+     run r3s3: 11 models, identical fold partition across models=True; fold sizes=[2475, 2475, 2474, 2474, 2474] events per fold=[60, 60, 59, 59, 60]
+     run r4s4: 11 models, identical fold partition across models=True; fold sizes=[2475, 2475, 2474, 2474, 2474] events per fold=[60, 60, 59, 59, 60]
+     CKINN partitions r1..r4 differ from r0 in [9913, 9812, 9889, 9899] rows (repeats re-split)
+     seed study (r0, s1..s4) uses the same partition as r0s0: True
+RICH: len(y)=169467, events=3339, labels binary=True
+  [MATCH] RICH n (len y) vs table08 n: ours=169467 stored=169467 |diff|=0 (tol 0)
+  [MATCH] RICH events (sum y) vs table08 events: ours=3339 stored=3339 |diff|=0 (tol 0)
+  [MATCH] RICH: 592 prediction arrays; wrong length=0, with NaN=0, outside [0,1]=0; global min=5.2e-06, max=0.758674
+  [MATCH] RICH: 70 fold-id arrays (58 for main runs); each is one integer fold id per row (shape (n,)), none negative/missing; bad=0; distinct fold counts per array=[5]
+     run r0s0: 14 models, identical fold partition across models=True; fold sizes=[33894, 33894, 33893, 33893, 33893] events per fold=[668, 668, 667, 668, 668]
+     run r1s1: 11 models, identical fold partition across models=True; fold sizes=[33894, 33894, 33893, 33893, 33893] events per fold=[668, 668, 667, 668, 668]
+     run r2s2: 11 models, identical fold partition across models=True; fold sizes=[33894, 33894, 33893, 33893, 33893] events per fold=[668, 668, 667, 668, 668]
+     run r3s3: 11 models, identical fold partition across models=True; fold sizes=[33894, 33894, 33893, 33893, 33893] events per fold=[668, 668, 667, 668, 668]
+     run r4s4: 11 models, identical fold partition across models=True; fold sizes=[33894, 33894, 33893, 33893, 33893] events per fold=[668, 668, 667, 668, 668]
+     CKINN partitions r1..r4 differ from r0 in [135617, 135512, 135639, 135627] rows (repeats re-split)
+     seed study (r0, s1..s4) uses the same partition as r0s0: True
+NHANES: len(y)=23528, events=993, labels binary=True
+  [MATCH] NHANES n (len y) vs table08 n: ours=23528 stored=23528 |diff|=0 (tol 0)
+  [MATCH] NHANES events (sum y) vs table08 events: ours=993 stored=993 |diff|=0 (tol 0)
+  [MATCH] NHANES: 592 prediction arrays; wrong length=0, with NaN=0, outside [0,1]=0; global min=0, max=0.879354
+  [MATCH] NHANES: 70 fold-id arrays (58 for main runs); each is one integer fold id per row (shape (n,)), none negative/missing; bad=0; distinct fold counts per array=[5]
+     run r0s0: 14 models, identical fold partition across models=True; fold sizes=[4706, 4706, 4706, 4705, 4705] events per fold=[199, 199, 199, 198, 198]
+     run r1s1: 11 models, identical fold partition across models=True; fold sizes=[4706, 4706, 4706, 4705, 4705] events per fold=[199, 199, 199, 198, 198]
+     run r2s2: 11 models, identical fold partition across models=True; fold sizes=[4706, 4706, 4706, 4705, 4705] events per fold=[199, 199, 199, 198, 198]
+     run r3s3: 11 models, identical fold partition across models=True; fold sizes=[4706, 4706, 4706, 4705, 4705] events per fold=[199, 199, 199, 198, 198]
+     run r4s4: 11 models, identical fold partition across models=True; fold sizes=[4706, 4706, 4706, 4705, 4705] events per fold=[199, 199, 199, 198, 198]
+     CKINN partitions r1..r4 differ from r0 in [18829, 18794, 18828, 18857] rows (repeats re-split)
+     seed study (r0, s1..s4) uses the same partition as r0s0: True
+  [MATCH] transport.npz: 72 prediction arrays, bad (length/NaN/range)=0; len(y_NAGALA)=12372 (events 298), len(y_RICH)=169467 (events 3339)
+     transport y_NAGALA identical to NAGALA_runs y: True
+     transport y_RICH identical to RICH_runs y: True
+
+====================================================================================================
+CHECK 1: table08_performance.csv (run-averaged AUROC, Brier, AUPRC; scaled Brier)
+====================================================================================================
+NAGALA LR:
+  [MATCH] NAGALA LR AUROC: ours=0.8052879725 stored=0.8052879725 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA LR Brier: ours=0.02224122275 stored=0.02224122275 |diff|=7.29e-17 (tol 1e-06)
+  [MATCH] NAGALA LR AUPRC: ours=0.1287835388 stored=0.1287835388 |diff|=8.33e-17 (tol 1e-06)
+  [MATCH] NAGALA LR scaled Brier: ours=0.05382591959 stored=0.05382591959 |diff|=0 (tol 1e-06)
+NAGALA cLR:
+  [MATCH] NAGALA cLR AUROC: ours=0.8057484439 stored=0.8057484439 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA cLR Brier: ours=0.0222284343 stored=0.0222284343 |diff|=7.98e-17 (tol 1e-06)
+  [MATCH] NAGALA cLR AUPRC: ours=0.1311260109 stored=0.1311260109 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA cLR scaled Brier: ours=0.05436995889 stored=0.05436995889 |diff|=6.25e-17 (tol 1e-06)
+NAGALA GAM:
+  [MATCH] NAGALA GAM AUROC: ours=0.8015158202 stored=0.8015158202 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA GAM Brier: ours=0.02235072099 stored=0.02235072099 |diff|=1.73e-17 (tol 1e-06)
+  [MATCH] NAGALA GAM AUPRC: ours=0.1212604721 stored=0.1212604721 |diff|=1.39e-17 (tol 1e-06)
+  [MATCH] NAGALA GAM scaled Brier: ours=0.04916770486 stored=0.04916770486 |diff|=5.55e-17 (tol 1e-06)
+NAGALA RF:
+  [MATCH] NAGALA RF AUROC: ours=0.804656742 stored=0.804656742 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA RF Brier: ours=0.02244180138 stored=0.02244180138 |diff|=8.67e-17 (tol 1e-06)
+  [MATCH] NAGALA RF AUPRC: ours=0.1122348747 stored=0.1122348747 |diff|=6.94e-17 (tol 1e-06)
+  [MATCH] NAGALA RF scaled Brier: ours=0.04529301193 stored=0.04529301193 |diff|=6.94e-17 (tol 1e-06)
+NAGALA XGB:
+  [MATCH] NAGALA XGB AUROC: ours=0.8008386482 stored=0.8008386482 |diff|=2.22e-16 (tol 1e-06)
+  [MATCH] NAGALA XGB Brier: ours=0.0225312165 stored=0.0225312165 |diff|=8.67e-17 (tol 1e-06)
+  [MATCH] NAGALA XGB AUPRC: ours=0.1080367772 stored=0.1080367772 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA XGB scaled Brier: ours=0.04148916242 stored=0.04148916242 |diff|=1.39e-17 (tol 1e-06)
+NAGALA XGB_mono:
+  [MATCH] NAGALA XGB_mono AUROC: ours=0.7983462718 stored=0.7983462718 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA XGB_mono Brier: ours=0.02264260965 stored=0.02264260965 |diff|=8.33e-17 (tol 1e-06)
+  [MATCH] NAGALA XGB_mono AUPRC: ours=0.1067880241 stored=0.1067880241 |diff|=1.39e-17 (tol 1e-06)
+  [MATCH] NAGALA XGB_mono scaled Brier: ours=0.03675033525 stored=0.03675033525 |diff|=3.47e-17 (tol 1e-06)
+NAGALA LGBM:
+  [MATCH] NAGALA LGBM AUROC: ours=0.796417367 stored=0.796417367 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA LGBM Brier: ours=0.02264518145 stored=0.02264518145 |diff|=4.86e-17 (tol 1e-06)
+  [MATCH] NAGALA LGBM AUPRC: ours=0.1030697133 stored=0.1030697133 |diff|=4.16e-17 (tol 1e-06)
+  [MATCH] NAGALA LGBM scaled Brier: ours=0.03664092698 stored=0.03664092698 |diff|=6.94e-18 (tol 1e-06)
+NAGALA LGBM_mono:
+  [MATCH] NAGALA LGBM_mono AUROC: ours=0.7964668104 stored=0.7964668104 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA LGBM_mono Brier: ours=0.02268411528 stored=0.02268411528 |diff|=7.63e-17 (tol 1e-06)
+  [MATCH] NAGALA LGBM_mono AUPRC: ours=0.108642066 stored=0.108642066 |diff|=5.55e-17 (tol 1e-06)
+  [MATCH] NAGALA LGBM_mono scaled Brier: ours=0.03498462497 stored=0.03498462497 |diff|=0 (tol 1e-06)
+NAGALA M1:
+  [MATCH] NAGALA M1 AUROC: ours=0.7980557813 stored=0.7980557813 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA M1 Brier: ours=0.02245093196 stored=0.02245093196 |diff|=6.94e-17 (tol 1e-06)
+  [MATCH] NAGALA M1 AUPRC: ours=0.1105047878 stored=0.1105047878 |diff|=8.33e-17 (tol 1e-06)
+  [MATCH] NAGALA M1 scaled Brier: ours=0.04490458381 stored=0.04490458381 |diff|=1.39e-17 (tol 1e-06)
+NAGALA M2:
+  [MATCH] NAGALA M2 AUROC: ours=0.7985185039 stored=0.7985185039 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA M2 Brier: ours=0.02247585691 stored=0.02247585691 |diff|=8.33e-17 (tol 1e-06)
+  [MATCH] NAGALA M2 AUPRC: ours=0.1096649321 stored=0.1096649321 |diff|=8.33e-17 (tol 1e-06)
+  [MATCH] NAGALA M2 scaled Brier: ours=0.04384423984 stored=0.04384423984 |diff|=6.94e-18 (tol 1e-06)
+NAGALA CKINN:
+  [MATCH] NAGALA CKINN AUROC: ours=0.8008888143 stored=0.8008888143 |diff|=2.22e-16 (tol 1e-06)
+  [MATCH] NAGALA CKINN Brier: ours=0.02242385715 stored=0.02242385715 |diff|=4.51e-17 (tol 1e-06)
+  [MATCH] NAGALA CKINN AUPRC: ours=0.1132727962 stored=0.1132727962 |diff|=2.78e-17 (tol 1e-06)
+  [MATCH] NAGALA CKINN scaled Brier: ours=0.04605638571 stored=0.04605638571 |diff|=3.47e-17 (tol 1e-06)
+NAGALA MI_LR [single-run model, r0s0; supplementary]:
+  [MATCH] NAGALA MI_LR AUROC: ours=0.803881378 stored=0.803881378 |diff|=1.11e-16 (tol 1e-06)
+  [MATCH] NAGALA MI_LR Brier: ours=0.02222538088 stored=0.02222538088 |diff|=4.16e-17 (tol 1e-06)
+  [MATCH] NAGALA MI_LR AUPRC: ours=0.1312055753 stored=0.1312055753 |diff|=2.78e-17 (tol 1e-06)
+  [MATCH] NAGALA MI_LR scaled Brier: ours=0.05449985583 stored=0.05449985583 |diff|=9.02e-17 (tol 1e-06)
+NAGALA LR_aug [single-run model, r0s0; supplementary]:
+  [MATCH] NAGALA LR_aug AUROC: ours=0.8021348774 stored=0.8021348774 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA LR_aug Brier: ours=0.02224209404 stored=0.02224209404 |diff|=3.47e-17 (tol 1e-06)
+  [MATCH] NAGALA LR_aug AUPRC: ours=0.1340802338 stored=0.1340802338 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA LR_aug scaled Brier: ours=0.05378885368 stored=0.05378885368 |diff|=4.16e-17 (tol 1e-06)
+NAGALA XGB_aug [single-run model, r0s0; supplementary]:
+  [MATCH] NAGALA XGB_aug AUROC: ours=0.7960299073 stored=0.7960299073 |diff|=1.11e-16 (tol 1e-06)
+  [MATCH] NAGALA XGB_aug Brier: ours=0.02245913493 stored=0.02245913493 |diff|=3.47e-17 (tol 1e-06)
+  [MATCH] NAGALA XGB_aug AUPRC: ours=0.1122906165 stored=0.1122906165 |diff|=1.39e-17 (tol 1e-06)
+  [MATCH] NAGALA XGB_aug scaled Brier: ours=0.04455561763 stored=0.04455561763 |diff|=7.63e-17 (tol 1e-06)
+RICH LR:
+  [MATCH] RICH LR AUROC: ours=0.8468790405 stored=0.8468790405 |diff|=1.11e-16 (tol 1e-06)
+  [MATCH] RICH LR Brier: ours=0.01852323493 stored=0.01852323493 |diff|=2.43e-17 (tol 1e-06)
+  [MATCH] RICH LR AUPRC: ours=0.09466372047 stored=0.09466372047 |diff|=8.33e-17 (tol 1e-06)
+  [MATCH] RICH LR scaled Brier: ours=0.04097956326 stored=0.04097956326 |diff|=2.08e-17 (tol 1e-06)
+RICH cLR:
+  [MATCH] RICH cLR AUROC: ours=0.8469079111 stored=0.8469079111 |diff|=0 (tol 1e-06)
+  [MATCH] RICH cLR Brier: ours=0.0185228001 stored=0.0185228001 |diff|=2.78e-17 (tol 1e-06)
+  [MATCH] RICH cLR AUPRC: ours=0.09472252582 stored=0.09472252582 |diff|=0 (tol 1e-06)
+  [MATCH] RICH cLR scaled Brier: ours=0.04100207616 stored=0.04100207616 |diff|=0 (tol 1e-06)
+RICH GAM:
+  [MATCH] RICH GAM AUROC: ours=0.848344947 stored=0.848344947 |diff|=0 (tol 1e-06)
+  [MATCH] RICH GAM Brier: ours=0.01845021124 stored=0.01845021124 |diff|=8.33e-17 (tol 1e-06)
+  [MATCH] RICH GAM AUPRC: ours=0.09897379195 stored=0.09897379195 |diff|=0 (tol 1e-06)
+  [MATCH] RICH GAM scaled Brier: ours=0.04476028594 stored=0.04476028594 |diff|=4.16e-17 (tol 1e-06)
+RICH RF:
+  [MATCH] RICH RF AUROC: ours=0.8430228675 stored=0.8430228675 |diff|=0 (tol 1e-06)
+  [MATCH] RICH RF Brier: ours=0.01852158308 stored=0.01852158308 |diff|=7.63e-17 (tol 1e-06)
+  [MATCH] RICH RF AUPRC: ours=0.09250300635 stored=0.09250300635 |diff|=4.16e-17 (tol 1e-06)
+  [MATCH] RICH RF scaled Brier: ours=0.04106508641 stored=0.04106508641 |diff|=6.94e-17 (tol 1e-06)
+RICH XGB:
+  [MATCH] RICH XGB AUROC: ours=0.8481276335 stored=0.8481276335 |diff|=0 (tol 1e-06)
+  [MATCH] RICH XGB Brier: ours=0.01843260947 stored=0.01843260947 |diff|=4.16e-17 (tol 1e-06)
+  [MATCH] RICH XGB AUPRC: ours=0.09571048197 stored=0.09571048197 |diff|=2.78e-17 (tol 1e-06)
+  [MATCH] RICH XGB scaled Brier: ours=0.04567159863 stored=0.04567159863 |diff|=6.94e-17 (tol 1e-06)
+RICH XGB_mono:
+  [MATCH] RICH XGB_mono AUROC: ours=0.8454978568 stored=0.8454978568 |diff|=0 (tol 1e-06)
+  [MATCH] RICH XGB_mono Brier: ours=0.01847517867 stored=0.01847517867 |diff|=7.29e-17 (tol 1e-06)
+  [MATCH] RICH XGB_mono AUPRC: ours=0.09286618687 stored=0.09286618687 |diff|=6.94e-17 (tol 1e-06)
+  [MATCH] RICH XGB_mono scaled Brier: ours=0.04346762417 stored=0.04346762417 |diff|=6.94e-18 (tol 1e-06)
+RICH LGBM:
+  [MATCH] RICH LGBM AUROC: ours=0.8479414955 stored=0.8479414955 |diff|=0 (tol 1e-06)
+  [MATCH] RICH LGBM Brier: ours=0.01843383624 stored=0.01843383624 |diff|=1.39e-17 (tol 1e-06)
+  [MATCH] RICH LGBM AUPRC: ours=0.09572511055 stored=0.09572511055 |diff|=4.16e-17 (tol 1e-06)
+  [MATCH] RICH LGBM scaled Brier: ours=0.04560808381 stored=0.04560808381 |diff|=6.25e-17 (tol 1e-06)
+RICH LGBM_mono:
+  [MATCH] RICH LGBM_mono AUROC: ours=0.8474244141 stored=0.8474244141 |diff|=0 (tol 1e-06)
+  [MATCH] RICH LGBM_mono Brier: ours=0.01846177903 stored=0.01846177903 |diff|=6.59e-17 (tol 1e-06)
+  [MATCH] RICH LGBM_mono AUPRC: ours=0.09607592549 stored=0.09607592549 |diff|=5.55e-17 (tol 1e-06)
+  [MATCH] RICH LGBM_mono scaled Brier: ours=0.04416137623 stored=0.04416137623 |diff|=5.55e-17 (tol 1e-06)
+RICH M1:
+  [MATCH] RICH M1 AUROC: ours=0.8493904904 stored=0.8493904904 |diff|=0 (tol 1e-06)
+  [MATCH] RICH M1 Brier: ours=0.0184074601 stored=0.0184074601 |diff|=6.94e-17 (tol 1e-06)
+  [MATCH] RICH M1 AUPRC: ours=0.0982521282 stored=0.0982521282 |diff|=2.78e-17 (tol 1e-06)
+  [MATCH] RICH M1 scaled Brier: ours=0.04697368015 stored=0.04697368015 |diff|=1.39e-17 (tol 1e-06)
+RICH M2:
+  [MATCH] RICH M2 AUROC: ours=0.8485812668 stored=0.8485812668 |diff|=0 (tol 1e-06)
+  [MATCH] RICH M2 Brier: ours=0.01841768304 stored=0.01841768304 |diff|=1.04e-17 (tol 1e-06)
+  [MATCH] RICH M2 AUPRC: ours=0.09793903485 stored=0.09793903485 |diff|=8.33e-17 (tol 1e-06)
+  [MATCH] RICH M2 scaled Brier: ours=0.04644439856 stored=0.04644439856 |diff|=6.94e-18 (tol 1e-06)
+RICH CKINN:
+  [MATCH] RICH CKINN AUROC: ours=0.8487996621 stored=0.8487996621 |diff|=0 (tol 1e-06)
+  [MATCH] RICH CKINN Brier: ours=0.01841103775 stored=0.01841103775 |diff|=1.04e-17 (tol 1e-06)
+  [MATCH] RICH CKINN AUPRC: ours=0.09868122948 stored=0.09868122948 |diff|=8.33e-17 (tol 1e-06)
+  [MATCH] RICH CKINN scaled Brier: ours=0.04678845122 stored=0.04678845122 |diff|=6.94e-17 (tol 1e-06)
+RICH MI_LR [single-run model, r0s0; supplementary]:
+  [MATCH] RICH MI_LR AUROC: ours=0.8476306411 stored=0.8476306411 |diff|=0 (tol 1e-06)
+  [MATCH] RICH MI_LR Brier: ours=0.01851353345 stored=0.01851353345 |diff|=5.2e-17 (tol 1e-06)
+  [MATCH] RICH MI_LR AUPRC: ours=0.09511215191 stored=0.09511215191 |diff|=2.78e-17 (tol 1e-06)
+  [MATCH] RICH MI_LR scaled Brier: ours=0.04148184701 stored=0.04148184701 |diff|=9.02e-17 (tol 1e-06)
+RICH LR_aug [single-run model, r0s0; supplementary]:
+  [MATCH] RICH LR_aug AUROC: ours=0.8467448329 stored=0.8467448329 |diff|=0 (tol 1e-06)
+  [MATCH] RICH LR_aug Brier: ours=0.01853252028 stored=0.01853252028 |diff|=2.08e-17 (tol 1e-06)
+  [MATCH] RICH LR_aug AUPRC: ours=0.09439517406 stored=0.09439517406 |diff|=6.94e-17 (tol 1e-06)
+  [MATCH] RICH LR_aug scaled Brier: ours=0.04049882433 stored=0.04049882433 |diff|=6.25e-17 (tol 1e-06)
+RICH XGB_aug [single-run model, r0s0; supplementary]:
+  [MATCH] RICH XGB_aug AUROC: ours=0.8476827736 stored=0.8476827736 |diff|=0 (tol 1e-06)
+  [MATCH] RICH XGB_aug Brier: ours=0.01845267744 stored=0.01845267744 |diff|=3.12e-17 (tol 1e-06)
+  [MATCH] RICH XGB_aug AUPRC: ours=0.09386835357 stored=0.09386835357 |diff|=1.39e-17 (tol 1e-06)
+  [MATCH] RICH XGB_aug scaled Brier: ours=0.0446326011 stored=0.0446326011 |diff|=2.08e-17 (tol 1e-06)
+NHANES LR:
+  [MATCH] NHANES LR AUROC: ours=0.8142350614 stored=0.8142350614 |diff|=2.22e-16 (tol 1e-06)
+  [MATCH] NHANES LR Brier: ours=0.03785470313 stored=0.03785470313 |diff|=9.02e-17 (tol 1e-06)
+  [MATCH] NHANES LR AUPRC: ours=0.1553284736 stored=0.1553284736 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES LR scaled Brier: ours=0.06355331467 stored=0.06355331467 |diff|=5.55e-17 (tol 1e-06)
+NHANES cLR:
+  [MATCH] NHANES cLR AUROC: ours=0.8142306328 stored=0.8142306328 |diff|=1.11e-16 (tol 1e-06)
+  [MATCH] NHANES cLR Brier: ours=0.03785353265 stored=0.03785353265 |diff|=4.16e-17 (tol 1e-06)
+  [MATCH] NHANES cLR AUPRC: ours=0.1553702265 stored=0.1553702265 |diff|=5.55e-17 (tol 1e-06)
+  [MATCH] NHANES cLR scaled Brier: ours=0.06358227004 stored=0.06358227004 |diff|=9.71e-17 (tol 1e-06)
+NHANES GAM:
+  [MATCH] NHANES GAM AUROC: ours=0.8271300747 stored=0.8271300747 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES GAM Brier: ours=0.03742269748 stored=0.03742269748 |diff|=4.86e-17 (tol 1e-06)
+  [MATCH] NHANES GAM AUPRC: ours=0.1701973313 stored=0.1701973313 |diff|=2.78e-17 (tol 1e-06)
+  [MATCH] NHANES GAM scaled Brier: ours=0.0742402367 stored=0.0742402367 |diff|=8.33e-17 (tol 1e-06)
+NHANES RF:
+  [MATCH] NHANES RF AUROC: ours=0.8110794108 stored=0.8110794108 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES RF Brier: ours=0.03780365161 stored=0.03780365161 |diff|=5.55e-17 (tol 1e-06)
+  [MATCH] NHANES RF AUPRC: ours=0.157000543 stored=0.157000543 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES RF scaled Brier: ours=0.0648162233 stored=0.0648162233 |diff|=6.94e-17 (tol 1e-06)
+NHANES XGB:
+  [MATCH] NHANES XGB AUROC: ours=0.8156093587 stored=0.8156093587 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES XGB Brier: ours=0.03773758209 stored=0.03773758209 |diff|=2.08e-17 (tol 1e-06)
+  [MATCH] NHANES XGB AUPRC: ours=0.1619900472 stored=0.1619900472 |diff|=5.55e-17 (tol 1e-06)
+  [MATCH] NHANES XGB scaled Brier: ours=0.06645064579 stored=0.06645064579 |diff|=2.78e-17 (tol 1e-06)
+NHANES XGB_mono:
+  [MATCH] NHANES XGB_mono AUROC: ours=0.8155017226 stored=0.8155017226 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES XGB_mono Brier: ours=0.03774525743 stored=0.03774525743 |diff|=1.39e-17 (tol 1e-06)
+  [MATCH] NHANES XGB_mono AUPRC: ours=0.1621372491 stored=0.1621372491 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES XGB_mono scaled Brier: ours=0.06626077392 stored=0.06626077392 |diff|=1.39e-17 (tol 1e-06)
+NHANES LGBM:
+  [MATCH] NHANES LGBM AUROC: ours=0.8185914894 stored=0.8185914894 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES LGBM Brier: ours=0.0377079845 stored=0.0377079845 |diff|=8.33e-17 (tol 1e-06)
+  [MATCH] NHANES LGBM AUPRC: ours=0.1610075013 stored=0.1610075013 |diff|=8.33e-17 (tol 1e-06)
+  [MATCH] NHANES LGBM scaled Brier: ours=0.06718282867 stored=0.06718282867 |diff|=5.55e-17 (tol 1e-06)
+NHANES LGBM_mono:
+  [MATCH] NHANES LGBM_mono AUROC: ours=0.8187345097 stored=0.8187345097 |diff|=1.11e-16 (tol 1e-06)
+  [MATCH] NHANES LGBM_mono Brier: ours=0.03774723773 stored=0.03774723773 |diff|=6.94e-17 (tol 1e-06)
+  [MATCH] NHANES LGBM_mono AUPRC: ours=0.1636754235 stored=0.1636754235 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES LGBM_mono scaled Brier: ours=0.06621178545 stored=0.06621178545 |diff|=8.33e-17 (tol 1e-06)
+NHANES M1:
+  [MATCH] NHANES M1 AUROC: ours=0.8201329475 stored=0.8201329475 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES M1 Brier: ours=0.03758613212 stored=0.03758613212 |diff|=1.39e-17 (tol 1e-06)
+  [MATCH] NHANES M1 AUPRC: ours=0.1636052407 stored=0.1636052407 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES M1 scaled Brier: ours=0.07019720335 stored=0.07019720335 |diff|=4.16e-17 (tol 1e-06)
+NHANES M2:
+  [MATCH] NHANES M2 AUROC: ours=0.825244772 stored=0.825244772 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES M2 Brier: ours=0.03742360585 stored=0.03742360585 |diff|=8.33e-17 (tol 1e-06)
+  [MATCH] NHANES M2 AUPRC: ours=0.1688486292 stored=0.1688486292 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES M2 scaled Brier: ours=0.07421776543 stored=0.07421776543 |diff|=1.39e-17 (tol 1e-06)
+NHANES CKINN:
+  [MATCH] NHANES CKINN AUROC: ours=0.8255825301 stored=0.8255825301 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES CKINN Brier: ours=0.03741224255 stored=0.03741224255 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES CKINN AUPRC: ours=0.1692250423 stored=0.1692250423 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES CKINN scaled Brier: ours=0.07449887002 stored=0.07449887002 |diff|=5.55e-17 (tol 1e-06)
+NHANES MI_LR [single-run model, r0s0; supplementary]:
+  [MATCH] NHANES MI_LR AUROC: ours=0.813999617 stored=0.813999617 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES MI_LR Brier: ours=0.0379078691 stored=0.0379078691 |diff|=8.33e-17 (tol 1e-06)
+  [MATCH] NHANES MI_LR AUPRC: ours=0.1514032693 stored=0.1514032693 |diff|=2.78e-17 (tol 1e-06)
+  [MATCH] NHANES MI_LR scaled Brier: ours=0.06223809903 stored=0.06223809903 |diff|=2.78e-17 (tol 1e-06)
+NHANES LR_aug [single-run model, r0s0; supplementary]:
+  [MATCH] NHANES LR_aug AUROC: ours=0.8150952608 stored=0.8150952608 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES LR_aug Brier: ours=0.03780066575 stored=0.03780066575 |diff|=6.25e-17 (tol 1e-06)
+  [MATCH] NHANES LR_aug AUPRC: ours=0.1569702771 stored=0.1569702771 |diff|=5.55e-17 (tol 1e-06)
+  [MATCH] NHANES LR_aug scaled Brier: ours=0.06489008706 stored=0.06489008706 |diff|=5.55e-17 (tol 1e-06)
+NHANES XGB_aug [single-run model, r0s0; supplementary]:
+  [MATCH] NHANES XGB_aug AUROC: ours=0.8165731677 stored=0.8165731677 |diff|=1.11e-16 (tol 1e-06)
+  [MATCH] NHANES XGB_aug Brier: ours=0.03772634012 stored=0.03772634012 |diff|=1.39e-17 (tol 1e-06)
+  [MATCH] NHANES XGB_aug AUPRC: ours=0.1624686446 stored=0.1624686446 |diff|=5.55e-17 (tol 1e-06)
+  [MATCH] NHANES XGB_aug scaled Brier: ours=0.06672874885 stored=0.06672874885 |diff|=0 (tol 1e-06)
+
+====================================================================================================
+CHECK 2: table09_hypothesis_endpoints.csv (H1 AUROC and H2 Brier point estimates)
+====================================================================================================
+  [MATCH] A: CKINN-M2 H1 NAGALA [AUROC (non-inferiority, margin 0.01)] CKINN-M2 AUROC: ours=0.002370310379 stored=0.002370310379 |diff|=2.81e-16 (tol 1e-06)
+  [MATCH] A: CKINN-M2 H1 NAGALA [AUROC (superiority, descriptive)] CKINN-M2 AUROC: ours=0.002370310379 stored=0.002370310379 |diff|=2.81e-16 (tol 1e-06)
+  [MATCH] A: CKINN-M2 H2 NAGALA Brier CKINN-M2: ours=-5.199976427e-05 stored=-5.199976427e-05 |diff|=0 (tol 1e-06)
+  [MATCH] A: CKINN-M2 H1 RICH [AUROC (non-inferiority, margin 0.01)] CKINN-M2 AUROC: ours=0.0002183953416 stored=0.0002183953416 |diff|=2.99e-17 (tol 1e-06)
+  [MATCH] A: CKINN-M2 H1 RICH [AUROC (superiority, descriptive)] CKINN-M2 AUROC: ours=0.0002183953416 stored=0.0002183953416 |diff|=2.99e-17 (tol 1e-06)
+  [MATCH] A: CKINN-M2 H2 RICH Brier CKINN-M2: ours=-6.645289271e-06 stored=-6.645289271e-06 |diff|=0 (tol 1e-06)
+  [MATCH] A: CKINN-M2 H1 NHANES [AUROC (non-inferiority, margin 0.01)] CKINN-M2 AUROC: ours=0.0003377581388 stored=0.0003377581388 |diff|=5.75e-17 (tol 1e-06)
+  [MATCH] A: CKINN-M2 H1 NHANES [AUROC (superiority, descriptive)] CKINN-M2 AUROC: ours=0.0003377581388 stored=0.0003377581388 |diff|=5.75e-17 (tol 1e-06)
+  [MATCH] A: CKINN-M2 H2 NHANES Brier CKINN-M2: ours=-1.136330669e-05 stored=-1.136330669e-05 |diff|=0 (tol 1e-06)
+  [MATCH] B: CKINN-M1 H1 NAGALA [AUROC (non-inferiority, margin 0.01)] CKINN-M1 AUROC: ours=0.002833032986 stored=0.002833032986 |diff|=2.71e-16 (tol 1e-06)
+  [MATCH] B: CKINN-M1 H1 NAGALA [AUROC (superiority, descriptive)] CKINN-M1 AUROC: ours=0.002833032986 stored=0.002833032986 |diff|=2.71e-16 (tol 1e-06)
+  [MATCH] B: CKINN-M1 H2 NAGALA Brier CKINN-M1: ours=-2.707480912e-05 stored=-2.707480912e-05 |diff|=0 (tol 1e-06)
+  [MATCH] B: CKINN-M1 H1 RICH [AUROC (non-inferiority, margin 0.01)] CKINN-M1 AUROC: ours=-0.0005908283353 stored=-0.0005908283353 |diff|=3.21e-17 (tol 1e-06)
+  [MATCH] B: CKINN-M1 H1 RICH [AUROC (superiority, descriptive)] CKINN-M1 AUROC: ours=-0.0005908283353 stored=-0.0005908283353 |diff|=3.21e-17 (tol 1e-06)
+  [MATCH] B: CKINN-M1 H2 RICH Brier CKINN-M1: ours=3.577649575e-06 stored=3.577649575e-06 |diff|=0 (tol 1e-06)
+  [MATCH] B: CKINN-M1 H1 NHANES [AUROC (non-inferiority, margin 0.01)] CKINN-M1 AUROC: ours=0.005449582623 stored=0.005449582623 |diff|=4.34e-18 (tol 1e-06)
+  [MATCH] B: CKINN-M1 H1 NHANES [AUROC (superiority, descriptive)] CKINN-M1 AUROC: ours=0.005449582623 stored=0.005449582623 |diff|=4.34e-18 (tol 1e-06)
+  [MATCH] B: CKINN-M1 H2 NHANES Brier CKINN-M1: ours=-0.0001738895735 stored=-0.0001738895735 |diff|=2e-17 (tol 1e-06)
+
+====================================================================================================
+CHECK 3: calibration slope (sklearn LogisticRegression C=1e10 on logit(p)), mean over 5 main runs; tol 1e-3
+====================================================================================================
+NAGALA CKINN: per-run slopes (sklearn) = [0.9671, 0.94717, 0.9198, 0.95271, 0.95514]; max |sklearn - Newton| = 2.27e-09
+  [MATCH] NAGALA CKINN mean calibration slope: ours=0.9483812368 stored=0.9483812365 |diff|=2.85e-10 (tol 0.001)
+NAGALA M2: per-run slopes (sklearn) = [0.9797, 0.90622, 0.91791, 0.8802, 0.89854]; max |sklearn - Newton| = 1.05e-09
+  [MATCH] NAGALA M2 mean calibration slope: ours=0.9165152119 stored=0.916515212 |diff|=1.2e-10 (tol 0.001)
+RICH CKINN: per-run slopes (sklearn) = [0.9896, 1.00323, 0.95854, 0.9593, 0.97613]; max |sklearn - Newton| = 6.01e-10
+  [MATCH] RICH CKINN mean calibration slope: ours=0.9773599576 stored=0.9773599578 |diff|=1.66e-10 (tol 0.001)
+RICH M2: per-run slopes (sklearn) = [0.97918, 0.9796, 0.99994, 0.98956, 0.96801]; max |sklearn - Newton| = 6.41e-09
+  [MATCH] RICH M2 mean calibration slope: ours=0.9832591136 stored=0.9832591129 |diff|=6.98e-10 (tol 0.001)
+NHANES CKINN: per-run slopes (sklearn) = [0.96535, 0.93635, 0.93218, 0.95492, 0.94363]; max |sklearn - Newton| = 2.53e-09
+  [MATCH] NHANES CKINN mean calibration slope: ours=0.9464865783 stored=0.9464865788 |diff|=4.68e-10 (tol 0.001)
+NHANES M2: per-run slopes (sklearn) = [0.94358, 0.93971, 0.93759, 0.94944, 0.92461]; max |sklearn - Newton| = 4.24e-10
+  [MATCH] NHANES M2 mean calibration slope: ours=0.9389864461 stored=0.9389864459 |diff|=2.09e-10 (tol 0.001)
+
+====================================================================================================
+CHECK 4: table31_transport.csv (seed-averaged ref and ext AUROC; transport gap)
+====================================================================================================
+  [MATCH] NAGALA->RICH M2 target-CV (ref) AUROC: ours=0.8478891656 stored=0.8478891656 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA->RICH M2 external AUROC: ours=0.8152546637 stored=0.8152546637 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA->RICH M2 transport gap: ours=0.03263450184 stored=0.03263450184 |diff|=5.55e-17 (tol 1e-06)
+  [MATCH] NAGALA->RICH CKINN target-CV (ref) AUROC: ours=0.8483342248 stored=0.8483342248 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA->RICH CKINN external AUROC: ours=0.8267293541 stored=0.8267293541 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA->RICH CKINN transport gap: ours=0.02160487079 stored=0.02160487079 |diff|=1.73e-17 (tol 1e-06)
+  [MATCH] [supplementary] table09 H3 NAGALA->RICH gap difference CKINN-M2: ours=-0.01102963106 stored=-0.01102963106 |diff|=3.64e-17 (tol 1e-06)
+  [MATCH] RICH->NAGALA M2 target-CV (ref) AUROC: ours=0.8021902685 stored=0.8021902685 |diff|=0 (tol 1e-06)
+  [MATCH] RICH->NAGALA M2 external AUROC: ours=0.7888847076 stored=0.7888847076 |diff|=1.11e-16 (tol 1e-06)
+  [MATCH] RICH->NAGALA M2 transport gap: ours=0.0133055609 stored=0.0133055609 |diff|=6.07e-17 (tol 1e-06)
+  [MATCH] RICH->NAGALA CKINN target-CV (ref) AUROC: ours=0.8018745143 stored=0.8018745143 |diff|=0 (tol 1e-06)
+  [MATCH] RICH->NAGALA CKINN external AUROC: ours=0.7946390158 stored=0.7946390158 |diff|=0 (tol 1e-06)
+  [MATCH] RICH->NAGALA CKINN transport gap: ours=0.007235498542 stored=0.007235498542 |diff|=8.33e-17 (tol 1e-06)
+  [MATCH] [supplementary] table09 H3 RICH->NAGALA gap difference CKINN-M2: ours=-0.006070062356 stored=-0.006070062356 |diff|=4.34e-17 (tol 1e-06)
+
+====================================================================================================
+CHECK 5: table22_missingness_auroc.csv (run-averaged AUROC under mcar30)
+====================================================================================================
+  [MATCH] NAGALA M2 AUROC mcar30: ours=0.7906041936 stored=0.7906041936 |diff|=0 (tol 1e-06)
+  [MATCH] NAGALA CKINN AUROC mcar30: ours=0.7927312335 stored=0.7927312335 |diff|=0 (tol 1e-06)
+  [MATCH] RICH M2 AUROC mcar30: ours=0.8440965456 stored=0.8440965456 |diff|=0 (tol 1e-06)
+  [MATCH] RICH CKINN AUROC mcar30: ours=0.8443819454 stored=0.8443819454 |diff|=0 (tol 1e-06)
+  [MATCH] NHANES M2 AUROC mcar30: ours=0.8096143249 stored=0.8096143249 |diff|=1.11e-16 (tol 1e-06)
+  [MATCH] NHANES CKINN AUROC mcar30: ours=0.8101458333 stored=0.8101458333 |diff|=1.11e-16 (tol 1e-06)
+
+====================================================================================================
+CHECK 6: table12_variance_components.csv (CKINN AUROC SD across seeds of repeat 0 and across main runs)
+====================================================================================================
+  [MATCH] NAGALA CKINN AUROC SD across seeds r0 (ddof=1): ours=0.003799685944 stored=0.003799685944 |diff|=6.2e-17 (tol 1e-06)
+  [MATCH] NAGALA CKINN AUROC SD across main runs (ddof=1): ours=0.005232394874 stored=0.005232394874 |diff|=2.86e-17 (tol 1e-06)
+  NAGALA [ddof=0, informative only]: seeds SD=0.003398542426, runs SD=0.004679996249
+  [MATCH] RICH CKINN AUROC SD across seeds r0 (ddof=1): ours=0.0004117550664 stored=0.0004117550664 |diff|=1.62e-16 (tol 1e-06)
+  [MATCH] RICH CKINN AUROC SD across main runs (ddof=1): ours=0.000359150018 stored=0.000359150018 |diff|=4.87e-17 (tol 1e-06)
+  RICH [ddof=0, informative only]: seeds SD=0.0003682849274, runs SD=0.0003212335417
+  [MATCH] NHANES CKINN AUROC SD across seeds r0 (ddof=1): ours=0.0009855259186 stored=0.0009855259186 |diff|=9.76e-18 (tol 1e-06)
+  [MATCH] NHANES CKINN AUROC SD across main runs (ddof=1): ours=0.001486813315 stored=0.001486813315 |diff|=4.4e-17 (tol 1e-06)
+  NHANES [ddof=0, informative only]: seeds SD=0.000881481179, runs SD=0.001329846257
+
+====================================================================================================
+CHECK 7: independent paired percentile bootstrap, NAGALA, run-averaged AUROC CKINN - M2 (1,000 draws, seed 20261120)
+====================================================================================================
+  point estimate (ours) = 0.002370310379; stored difference = 0.002370310379
+  our 95% CI = [-0.000279, 0.005245], bootstrap SD = 0.001455, P(diff <= -0.01) = 0.0000
+  stored 95% CI = [-0.000482, 0.005377], stored boot_sd = 0.001484, stored n_draws = 2000
+  [MATCH] bootstrap ci_lo (ours vs stored): ours=-0.0002791206878 stored=-0.0004820732679 |diff|=0.000203 (tol 0.003)
+  [MATCH] bootstrap ci_hi (ours vs stored): ours=0.005245158511 stored=0.005376743555 |diff|=0.000132 (tol 0.003)
+
+====================================================================================================
+SUMMARY: 233 comparisons matched, 0 mismatched. Runtime 84s
+====================================================================================================
