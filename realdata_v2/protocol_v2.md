@@ -120,3 +120,21 @@ Configuration hash (sha256 of the canonical JSON of the full-mode configuration,
   - Disclosed rather than changed (changing it would need refitting): a "seed" sets the network initialisation, the inner validation split and the batch order together. M1, which has no augmentation, therefore sees its batches in a different order from M2 and CKINN after the first epoch. The training rows, inner split and seed are still shared.
   - CKINN starts from M2's best configuration among its first 24 (section 5), so it could have differed from M2's final configuration. It did not: in all three cohorts M2's best configuration was among the first 24, so CKINN and M2 share the network configuration (table 07b). Family A therefore isolates the penalty.
   - The minimum detectable effect and the non-inferiority power (section 6) are unadjusted for the Holm correction and for training variability; the report now says so. The intervals for the IPCW time-dependent AUROC hold the censoring distribution fixed.
+- 2026-11-21, after the v2 results had been seen. **Post hoc additions (label PH)** to cover the 28-step protocol where the data allow it (`COVERAGE_28_STEPS.md`, `ERRORS_OBJECTIVE1.md`). None enters a hypothesis family, none changes a v2 verdict, and the frozen configuration is unchanged (new settings live in `ckv2/posthoc.py`). Each is reported in full in report section 12, whatever it shows:
+  - step 2: BMI set to 24 and to 35 in up to 1,000 held-out people per fold; model-agnostic violation rates (log-odds change against the prior after +0.25 training SD, or a 0-to-1 change for binary predictors) for every model;
+  - step 6: one PubMed-verified reference per sign-table row (found after the table was frozen); a CKINN variant that also constrains diastolic blood pressure;
+  - step 8: LR, M2 and CKINN trained with balanced class weights;
+  - step 10: the older-and-lean subgroup (age 65 or more, BMI under 20) across the lambda path, with the 20-event rule;
+  - step 12: transport, seed 0, for the models v2 left out, giving a train-by-test matrix for every model;
+  - step 14: permutation-sampling SHAP on the log-odds scale (200 held-out rows, 50 training background rows, 8 antithetic permutations) for LR, XGBoost, monotone XGBoost, M1, M2 and CKINN; partial-dependence plots;
+  - steps 15 and 27: a fixed reasoning-text template for 50 people per cohort (CKINN), worded as model behaviour; texts are row-level and stay in the local cache;
+  - step 16: AUPRC and false-negative rate by group;
+  - step 17: intercept-only recalibration with 1,000 target participants;
+  - step 19: SVM (radial kernel by Nystroem approximation, 300 components, linear SVM, Platt scaling on the inner validation split), tuned over the LR grid on development rows, 5 repeats of 5-fold CV;
+  - step 20: CKINN with inverse-frequency sex-by-age-band weights (M5); pooled training with a cohort indicator (M4, evaluated within the two training cohorts only, because the indicator has no value for a new population); a wrong-sign control on HDL;
+  - step 21: the TG/HDL ratio as an extra input with its own sign (+);
+  - step 22 (RQ7): metrics among participants with baseline fasting glucose below 5.6 mmol/L;
+  - steps 5, 24, 27: a predictor audit table, a list of proposal variables that the data lack, and one scorecard;
+  - proposal section 3C: one-step progression in RICH (baseline FPG below 5.6 mmol/L to FPG of at least 5.6 mmol/L at the final visit, or diabetes), using RICH's tuned configurations, binary outcome (the transition time is not observed);
+  - proposal section 5: NHANES with "told of prediabetes" (DIQ160, cycles 2005-06 onwards) and "told of hypertension" (BPQ020) as extra inputs, both with sign +; a prediabetes diagnosis implies an earlier glucose test, so this is exploratory only.
+  Refits that repeat a main-run fit use the same seed, rows and configuration; the notebook reports the largest difference from the stored predictions.

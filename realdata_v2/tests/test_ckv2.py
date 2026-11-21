@@ -205,7 +205,7 @@ def test_monotone_baselines_are_monotone(name):
         assert _is_monotone(m, d, f, SIGNS_T2[f]), (name, f)
 
 
-@pytest.mark.parametrize("name", ["LR", "GAM", "RF", "XGB", "LGBM", "MI_LR", "LR_aug", "XGB_aug", "M1", "M2"])
+@pytest.mark.parametrize("name", ["LR", "GAM", "RF", "XGB", "LGBM", "MI_LR", "LR_aug", "XGB_aug", "M1", "M2", "SVM"])
 def test_every_model_returns_valid_probabilities(name):
     d = toy_frame()
     feats = ["age_years", "sex_female", "bmi_kgm2", "sbp_mmHg", "tg_mmol", "hdl_mmol"]
@@ -305,3 +305,69 @@ def test_survey_replicate_weights():
     for s in (1, 2):
         for p in (1, 2):
             assert len(set(r0[(st == s) & (psu == p)])) == 1
+
+
+# ------------------------------------------------------------------ post hoc additions (PH)
+def _linear_predict(beta, feats):
+    def predict(df):
+        z = sum(b * np.nan_to_num(df[f].to_numpy(float)) for b, f in zip(beta, feats))
+        return 1 / (1 + np.exp(-z))
+    return predict
+
+
+def test_permutation_shap_is_exact_for_a_linear_logit_and_additive():
+    from ckv2.posthoc import permutation_shap
+    rng = np.random.default_rng(0)
+    feats = ["a", "b", "c"]
+    beta = [0.8, -0.5, 0.0]
+    rows = pd.DataFrame(rng.normal(size=(5, 3)), columns=feats)
+    bg = pd.DataFrame(rng.normal(size=(40, 3)), columns=feats)
+    phi, base, fx = permutation_shap(_linear_predict(beta, feats), rows, bg, feats, 4, np.random.default_rng(1))
+    expected = (rows.to_numpy() - bg.to_numpy().mean(0)) * np.array(beta)
+    assert np.allclose(phi, expected, atol=1e-8)
+    assert np.allclose(phi.sum(1), fx - base, atol=1e-8)
+
+
+def test_perturbation_violations_monotone_and_anti_monotone():
+    from ckv2.posthoc import perturbation_violations
+    rng = np.random.default_rng(2)
+    df = pd.DataFrame({"bmi_kgm2": rng.normal(25, 3, 300), "hdl_mmol": rng.normal(1.3, 0.3, 300), "exercise_regular": rng.integers(0, 2, 300).astype(float)})
+    df.loc[:9, "bmi_kgm2"] = np.nan
+    signs = {"bmi_kgm2": 1, "hdl_mmol": -1, "exercise_regular": -1}
+    good = perturbation_violations(_linear_predict([0.2, -1.0, -0.5], list(df)), df, df, signs, list(df), 0.25, 1e-6)
+    bad = perturbation_violations(_linear_predict([-0.2, 1.0, 0.5], list(df)), df, df, signs, list(df), 0.25, 1e-6)
+    assert all(v["viol"] == 0 for v in good.values())
+    assert bad["bmi_kgm2"]["viol"] == bad["bmi_kgm2"]["n"] == 290
+    assert bad["exercise_regular"]["n"] == int((df.exercise_regular == 0).sum()) == bad["exercise_regular"]["viol"]
+
+
+def test_reasoning_text_wording_and_flags():
+    from ckv2.posthoc import reasoning_inputs, reasoning_text
+    rng = np.random.default_rng(3)
+    df = pd.DataFrame({"bmi_kgm2": rng.normal(25, 3, 50), "tg_mmol": np.exp(rng.normal(0.2, 0.4, 50)), "hdl_mmol": rng.normal(1.3, 0.3, 50)})
+    feats = list(df)
+    for beta, consistent in (([0.2, 0.8, -1.0], True), ([0.2, -0.8, -1.0], False)):
+        pred = _linear_predict(beta, feats)
+        rec = reasoning_inputs(pred, df.iloc[:5], df, {"bmi_kgm2": 1, "tg_mmol": 1, "hdl_mmol": -1}, feats, 0.25, 1e-6, ["tg_mmol", "hdl_mmol"])
+        rec["phi"] = np.tile(np.array(beta), (5, 1))
+        txt = reasoning_text(rec, 0, "B")
+        low = txt.lower()
+        for word in ("should", "lose", "prevent", "you will", "advise"):
+            assert word not in low, word
+        assert ("agrees with every clinical prior" in txt) == consistent
+        assert "not a diagnosis" in txt
+
+
+def test_weights_and_wilson_and_progression_label():
+    from ckv2.posthoc import balanced_weights, group_weights, progression_frame, wilson
+    y = np.r_[np.ones(10), np.zeros(90)]
+    w = balanced_weights(y)
+    assert abs(w.mean() - 1) < 1e-12 and abs(w[y == 1].sum() - w[y == 0].sum()) < 1e-9
+    fr = pd.DataFrame({"sex": ["f"] * 30 + ["m"] * 70, "age_band": ["20-39"] * 50 + ["60+"] * 50})
+    g = group_weights(fr)
+    assert abs(g.mean() - 1) < 1e-12
+    lo, hi = wilson(30, 100)
+    assert lo < 0.3 < hi
+    ev = pd.DataFrame({"fpg_mmol": [5.0, 5.5, 5.7, 5.2], "fpg_final": [5.7, 5.0, 7.5, 5.0], "label": [0.0, 1.0, 1.0, 0.0]})
+    pf = progression_frame(ev)
+    assert len(pf) == 3 and pf.y.tolist() == [1, 1, 0]

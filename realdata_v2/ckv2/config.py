@@ -109,6 +109,12 @@ GROUP_OF = {**{c: "demo" for c in ("age_years", "sex_female", "smoker", "alcohol
             **{c: "clin" for c in ("bmi_kgm2", "waist_cm", "sbp_mmHg", "dbp_mmHg")},
             **{c: "panel" for c in PANEL}, **{c: "glyc" for c in GLYC}}
 GROUPS = ("demo", "clin", "panel", "glyc")
+# Post hoc features (protocol_v2.md section 10, PH): history questions in NHANES, the TG/HDL ratio, a cohort indicator for pooled
+# training. They are outside ALL_FEATURES, so no pre-specified feature set or the configuration hash changes.
+PH_FEATURES = ("prediabetes_told", "hypertension_told", "tg_hdl_ratio", "cohort_rich")
+GROUP_OF.update({"prediabetes_told": "demo", "hypertension_told": "demo", "cohort_rich": "demo", "tg_hdl_ratio": "panel"})
+BINARY = BINARY + ("prediabetes_told", "hypertension_told", "cohort_rich")
+LOG_COLS = LOG_COLS + ("tg_hdl_ratio",)
 RANGES = {"age_years": (18, 100), "bmi_kgm2": (12, 70), "waist_cm": (40, 190), "sbp_mmHg": (60, 260), "dbp_mmHg": (30, 160),
           "tg_mmol": (0.05, 60), "hdl_mmol": (0.1, 10), "ldl_mmol": (0.2, 15), "tc_mmol": (1.0, 20), "alt_u_l": (1, 2000),
           "ast_u_l": (1, 2000), "ggt_u_l": (1, 5000), "fpg_mmol": (2.0, 30), "hba1c_pct": (3.0, 18)}

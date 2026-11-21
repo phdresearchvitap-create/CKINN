@@ -84,7 +84,7 @@ class ConstrainedLR:
 
 
 class Fitted:
-    """name in LR, cLR, GAM, RF, XGB, XGB_mono, LGBM, LGBM_mono, MI_LR, LR_aug, XGB_aug, M1, M2, CKINN."""
+    """name in LR, cLR, GAM, RF, XGB, XGB_mono, LGBM, LGBM_mono, MI_LR, LR_aug, XGB_aug, M1, M2, CKINN, and the post hoc SVM."""
 
     def __init__(self, name: str, features: Sequence[str], hp: dict, seed: int, cfg, signs: Optional[Dict[str, int]] = None,
                  lam: float = 0.0):
@@ -177,6 +177,14 @@ class Fitted:
                 Zi = imp.fit_transform(Za[:, keep])
                 self.imputers.append(imp)
                 self.mi_models.append(LogisticRegression(C=hp["C"], max_iter=3000).fit(Zi, ya, sample_weight=wa))
+        elif name == "SVM":
+            from sklearn.kernel_approximation import Nystroem
+            from sklearn.svm import LinearSVC
+            self.prep = Prep(self.features, cfg.winsor).fit(a)
+            self.kmap = Nystroem(kernel="rbf", n_components=min(300, len(a)), random_state=seed % (2 ** 31 - 1)).fit(self._design_lr(a))
+            self.model = LinearSVC(C=hp["C"], dual=False, max_iter=5000).fit(self.kmap.transform(self._design_lr(a)), ya, sample_weight=wa)
+            db = self.model.decision_function(self.kmap.transform(self._design_lr(b)))
+            self.platt = LogisticRegression(C=1e6, max_iter=1000).fit(db.reshape(-1, 1), yb)
         elif name == "RF":
             R = a[self.features].to_numpy(float)
             self.med = np.nan_to_num(np.nanmedian(R, axis=0), nan=0.0)
@@ -213,6 +221,8 @@ class Fitted:
             return self.model.predict_proba(self._design_lr(df))[:, 1]
         if name == "GAM":
             return self.model.predict_proba(self._design_gam(df))[:, 1]
+        if name == "SVM":
+            return self.platt.predict_proba(self.model.decision_function(self.kmap.transform(self._design_lr(df))).reshape(-1, 1))[:, 1]
         if name == "MI_LR":
             X, M = self.prep.transform(df)
             Z = np.where(M == 1, X, np.nan).astype(np.float64)[:, self.mi_keep]

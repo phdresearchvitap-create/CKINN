@@ -72,6 +72,8 @@ def run_task(spec: dict, cfg) -> dict:
         if t.get("corrupt"):
             mech, rate, cseed = t["corrupt"]
             df = corrupt(df, spec["feats"], mech, rate, cseed)
+        for f, v in (t.get("set") or {}).items():                      # post hoc: set a predictor to a fixed value (BMI 24 / 35)
+            df[f] = float(v)
         out["preds"][t["tag"]] = fm.predict(df).astype(np.float32)
     nn = spec["model"] in ("M1", "M2", "CKINN")
     if nn and spec.get("explain"):
@@ -113,6 +115,27 @@ def run_task(spec: dict, cfg) -> dict:
                 curve.append(float(fm.predict(d2).mean()))
             res[f] = {"grid": grid, "pd": np.array(curve)}
         out["pd"] = res
+    if spec.get("perturb"):
+        from .posthoc import perturbation_violations
+        pz = spec["perturb"]
+        df = frame(pz["frame"]).iloc[pz["idx"]].reset_index(drop=True)
+        out["perturb"] = perturbation_violations(fm.predict, df, tr, pz["signs"], spec["feats"], pz["delta_sd"], cfg.viol_tol * pz["delta_sd"])
+    if spec.get("shap"):
+        from .posthoc import permutation_shap
+        sh = spec["shap"]
+        df = frame(sh["frame"]).iloc[sh["idx"]].reset_index(drop=True)
+        rng = np.random.default_rng(sh["seed"])
+        bg = tr.iloc[rng.choice(len(tr), min(sh["n_bg"], len(tr)), replace=False)].reset_index(drop=True)
+        phi, base, fx = permutation_shap(fm.predict, df, bg, spec["feats"], sh["n_perm"], rng)
+        out["shap"] = {"phi": phi.astype(np.float32), "base": base, "fx": fx.astype(np.float32),
+                       "x": df[spec["feats"]].to_numpy(float).astype(np.float32), "feats": list(spec["feats"])}
+        if spec.get("reason"):
+            from .posthoc import reasoning_inputs
+            rz = spec["reason"]
+            k = min(rz["n"], len(df))
+            out["reason"] = reasoning_inputs(fm.predict, df.iloc[:k].reset_index(drop=True), tr, rz["signs"], spec["feats"],
+                                             rz["delta_sd"], cfg.viol_tol * rz["delta_sd"], rz["panel"])
+            out["reason"]["phi"] = phi[:k].astype(np.float32)
     out["seconds"] = time.perf_counter() - t0
     return out
 

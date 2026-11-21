@@ -64,6 +64,7 @@ def load_nagala(raw: pd.DataFrame) -> pd.DataFrame:
     d["tg_mmol"], d["hdl_mmol"], d["tc_mmol"] = n.tg.where(n.tg > 0), n.hdl.where(n.hdl > 0), n.tc
     d["alt_u_l"], d["ast_u_l"], d["ggt_u_l"] = n.alt.where(n.alt > 0), n.ast.where(n.ast > 0), n.ggt
     d["fpg_mmol"], d["hba1c_pct"] = n.fpg, n.a1c
+    d["tg_hdl_ratio"] = d.tg_mmol / d.hdl_mmol                          # post hoc feature (PH)
     d["cohort"], d["site"], d["task"] = "NAGALA", "0", "B"
     d["label"] = n.incident.astype(float)
     d["follow_years"] = n.fu_days / 365.25
@@ -84,6 +85,8 @@ def load_rich(raw: pd.DataFrame) -> pd.DataFrame:
     for c_out, c_in in (("tg_mmol", "tg"), ("hdl_mmol", "hdl"), ("ldl_mmol", "ldl"), ("alt_u_l", "alt"), ("ast_u_l", "ast")):
         d[c_out] = r[c_in].where(r[c_in] > 0)                                # exact zeros = not measured (A12)
     d["tc_mmol"], d["fpg_mmol"] = r.tc, r.fpg
+    d["tg_hdl_ratio"] = d.tg_mmol / d.hdl_mmol                          # post hoc feature (PH)
+    d["fpg_final"] = r.fpg_final                                        # final-visit FPG: post hoc progression analysis only, never a predictor
     d["cohort"], d["site"], d["task"] = "RICH", r.site.astype(int).astype(str), "B"
     d["label"] = r.event.astype(float)
     d["follow_years"] = r.fu_years
@@ -109,6 +112,9 @@ def load_nhanes(raw: pd.DataFrame) -> pd.DataFrame:
     d["alt_u_l"], d["ast_u_l"], d["ggt_u_l"] = h.LBXSATSI, h.LBXSASSI, h.LBXSGTSI
     fpg_all = h.LBXGLU / 18.016
     d["fpg_mmol"], d["hba1c_pct"] = fpg_all, h.LBXGH
+    d["tg_hdl_ratio"] = d.tg_mmol / d.hdl_mmol                          # post hoc features (PH): ratio and history questions
+    d["prediabetes_told"] = np.where(h.DIQ160 == 1, 1.0, np.where(h.DIQ160 == 2, 0.0, np.nan))
+    d["hypertension_told"] = np.where(h.BPQ020 == 1, 1.0, np.where(h.BPQ020 == 2, 0.0, np.nan))
     # v1 label (kept for the sensitivity analysis)
     known = (h.DIQ010 == 1)
     lab_v1 = np.where(fpg_all.notna() | h.LBXGH.notna(), ((fpg_all.fillna(-1) >= 7.0) | (h.LBXGH.fillna(-1) >= 6.5)).astype(float), np.nan)
