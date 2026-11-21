@@ -1211,6 +1211,7 @@ SCORECARD = _perf.merge(pd.DataFrame(rows), on=["cohort", "model"], how="right")
 # share of constrained predictors whose SHAP dependence has the prior sign, stored so the report reads it from a table
 SHAP_DIRSUM = (SHAP_DIR.assign(_a=SHAP_DIR.agrees_with_prior.map({True: 1.0, False: 0.0}))
                .groupby(["cohort", "model"])._a.agg(n_constrained="size", n_estimable="count", n_agree="sum", share_agree="mean").reset_index())
+SHAP_DIRSUM["n_agree"] = SHAP_DIRSUM.n_agree.astype(int)
 for name, df in (("tablePH15_shap_importance", SHAP_IMP), ("tablePH16_shap_direction_vs_prior", SHAP_DIR), ("tablePH17_shap_vs_integrated_gradients", SHAP_IG),
                  ("tablePH18_reasoning_summary", REASON), ("tablePH19_predictor_audit", AUDIT_TBL), ("tablePH20_unavailable_variables", UNAVAIL),
                  ("tablePH21_sign_table_references", SIGNREF), ("tablePH22_scorecard", SCORECARD),

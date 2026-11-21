@@ -27,10 +27,10 @@
 | 11 | Not possible on real data | No simulated physiological state exists. |
 | 12 | Partly | Train-by-test matrix for every model, seed 0 (PH09). The S1+S2-to-S3 run remains impossible: NHANES has a different outcome. |
 | 13 | Partly | The card's primary endpoint (on S3 at 30% missingness) is not computable on real data; v2 froze H1 instead. |
-| 14 | Covered (PH) | SHAP for LR, XGBoost, monotone XGBoost, M1, M2, CKINN (PH15 to PH17), partial-dependence plots (figure PH1), integrated gradients (v2). Fidelity to generator weights is impossible on real data. |
+| 14 | Covered (PH) | SHAP for LR, XGBoost, monotone XGBoost, M1, M2, CKINN (PH15 to PH17, PH23), partial-dependence plots (figure PH1), integrated gradients (v2). Fidelity to generator weights is impossible on real data. |
 | 15 | Covered (PH) | Reasoning text for 50 people per cohort with a sign-consistency flag and a blood-panel counterfactual worded as model behaviour (summary PH18; texts in the local cache only). |
 | 16 | Covered (PH) | AUPRC and false-negative rate by group (PH14); socio-economic groups do not exist in the data. |
-| 17 | Covered | v2, plus intercept-only recalibration (PH10). |
+| 17 | Covered | v2, plus intercept-only recalibration (PH10), estimated on 1,000 target participants; with few events in that sample the shift is imprecise, and PH10 shows the sample. |
 | 18 | Covered | Unchanged. |
 | 19 | Covered (PH) | SVM added (PH01, PH03), 5 repeats of 5-fold CV. |
 | 20 | Covered (PH) | M4 pooled training with a cohort indicator (PH08, within the two training cohorts only), M5 group weights and an HDL wrong-sign control (PH07). |

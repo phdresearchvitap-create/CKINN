@@ -11,6 +11,7 @@ Added after the v2 results had been seen, to cover the 28-step protocol where th
 - Notebook: cells PH1 to PH4 (fits; reproducibility, SVM, violations, variants, pooled indicator; transport matrix, recalibration, stress test, RQ7, progression, group AUPRC; SHAP, reasoning summary, audit, references, scorecard, two figures); report section 12.
 - Tests: 38 (SHAP exactness on a linear model, perturbation violations, reasoning wording, weights, Wilson, progression label, SVM).
 - Documents: `ERRORS_OBJECTIVE1.md`, `NOVELTY_SEARCH.md`, sign-table references in `references.md`, corrected `COVERAGE_28_STEPS.md`.
+- Fixed after the first full run (caught by the integrity cell): the SHAP direction summary in the report is now read from a stored table (PH23) instead of being computed in the report. Table PH10 shows the calibration sample; SVM ECE added to PH03 and PH22.
 
 ## v2 (2026-11-20)
 
