@@ -3844,7 +3844,7 @@ for (c, m), (n, k, eq) in pair_acc.items():
 BMIPAIRS = pd.DataFrame(rows)
 # SVM performance and CKINN minus SVM (run-averaged, same bootstrap convention as table 8)
 _pl = {c: {"y": Y[c], "vecs": {"SVM": [SVMP[c][("SVM", r, s)]["none"] for r, s in MAINRUNS], "CKINN": [P[c][("CKINN", r, s)]["none"] for r, s in MAINRUNS]},
-           "stats": ["auroc", "brier", "slope", "citl"]} for c in COHORTS}
+           "stats": ["auroc", "brier", "slope", "citl", "ece"]} for c in COHORTS}
 _b = AN.bootstrap(_pl, CFG.n_boot_desc, N_WORKERS)
 rows = []
 for c in COHORTS:
@@ -3853,7 +3853,7 @@ for c in COHORTS:
                           for r, s in MAINRUNS]))
     rows.append({"cohort": c, "model": "SVM", "auroc": pt[("SVM", "auroc")], "auroc_lo": AN.ci(dr[("SVM", "auroc")])[0], "auroc_hi": AN.ci(dr[("SVM", "auroc")])[1],
                  "auprc": float(np.mean([AN.auprc(Y[c], SVMP[c][("SVM", r, s)]["none"]) for r, s in MAINRUNS])), "brier": pt[("SVM", "brier")],
-                 "slope": pt[("SVM", "slope")], "citl": pt[("SVM", "citl")], "ckinn_minus_svm_auroc": pt[("CKINN", "auroc")] - pt[("SVM", "auroc")],
+                 "slope": pt[("SVM", "slope")], "citl": pt[("SVM", "citl")], "ece": pt[("SVM", "ece")], "ckinn_minus_svm_auroc": pt[("CKINN", "auroc")] - pt[("SVM", "auroc")],
                  "diff_lo": AN.ci(dr[("CKINN", "auroc")] - dr[("SVM", "auroc")])[0], "diff_hi": AN.ci(dr[("CKINN", "auroc")] - dr[("SVM", "auroc")])[1],
                  f"auroc_loss_{PRIM}": loss})
 SVMPERF = pd.DataFrame(rows)
@@ -3942,7 +3942,8 @@ for m in MATRIX_MODELS:
         prc = 1 / (1 + np.exp(-(MT.logit(MT.clip(p)) + a)))
         rows_rc.append({"source": src, "target": tgt, "model": m, "intercept_shift": a, "brier_before": MT.brier_w(y[rest], p[rest]),
                         "brier_after": MT.brier_w(y[rest], prc[rest]), "citl_before": MT.citl_w(y[rest], p[rest]), "citl_after": MT.citl_w(y[rest], prc[rest]),
-                        "mean_predicted_after": float(prc[rest].mean()), "observed_rate": float(y[rest].mean())})
+                        "mean_predicted_after": float(prc[rest].mean()), "observed_rate": float(y[rest].mean()),
+                        "calibration_n": int(len(cal)), "calibration_events": int(y[cal].sum()), "calibration_observed_rate": float(y[cal].mean())})
     rows.append(row)
 TMATRIX, RECAL_INT = pd.DataFrame(rows), pd.DataFrame(rows_rc)
 # older-and-lean stress test (age 65 or more and BMI below 20) across lambda; lambda 0 is M2 (same configuration, seed and rows)
@@ -4079,7 +4080,7 @@ SIGNREF = pd.DataFrame([{"predictor": f, "prior_sign": "+" if C.SIGNS_T3.get(f, 
 # scorecard: one row per cohort and model (run-averaged where five runs exist)
 _sc_models = list(C.MAIN_MODELS) + ["SVM"]
 _perf = pd.concat([PERF[PERF.model.isin(C.MAIN_MODELS)][["cohort", "model", "auroc", "auprc", "brier", "slope", "citl", "ece"]],
-                   SVMPERF[["cohort", "model", "auroc", "auprc", "brier", "slope", "citl"]]], ignore_index=True)
+                   SVMPERF[["cohort", "model", "auroc", "auprc", "brier", "slope", "citl", "ece"]]], ignore_index=True)
 rows = []
 for c in COHORTS:
     y = Y[c]
@@ -4099,9 +4100,13 @@ for c in COHORTS:
             row["transport_gap_into_this_cohort"] = float(TMATRIX.loc[TMATRIX.model == m, f"gap_{src}_to_{c}"].iloc[0])
         rows.append(row)
 SCORECARD = _perf.merge(pd.DataFrame(rows), on=["cohort", "model"], how="right")
+# share of constrained predictors whose SHAP dependence has the prior sign, stored so the report reads it from a table
+SHAP_DIRSUM = (SHAP_DIR.assign(_a=SHAP_DIR.agrees_with_prior.map({True: 1.0, False: 0.0}))
+               .groupby(["cohort", "model"])._a.agg(n_constrained="size", n_estimable="count", n_agree="sum", share_agree="mean").reset_index())
 for name, df in (("tablePH15_shap_importance", SHAP_IMP), ("tablePH16_shap_direction_vs_prior", SHAP_DIR), ("tablePH17_shap_vs_integrated_gradients", SHAP_IG),
                  ("tablePH18_reasoning_summary", REASON), ("tablePH19_predictor_audit", AUDIT_TBL), ("tablePH20_unavailable_variables", UNAVAIL),
-                 ("tablePH21_sign_table_references", SIGNREF), ("tablePH22_scorecard", SCORECARD)):
+                 ("tablePH21_sign_table_references", SIGNREF), ("tablePH22_scorecard", SCORECARD),
+                 ("tablePH23_shap_direction_summary", SHAP_DIRSUM)):
     df.to_csv(OUT / "tables" / f"{name}.csv", index=False)
 # figures: partial dependence (repeat 0, averaged over folds) and mean |SHAP|
 _FIG = OUT / "figures"
@@ -4144,7 +4149,7 @@ for e, kw in (("pdf", {}), ("png", {"dpi": 300})):
     fig.savefig(_FIG / f"figPH2_shap_importance.{e}", bbox_inches="tight", **kw)
 plt.close(fig)
 with pd.option_context("display.width", 250, "display.max_columns", 40, "display.max_rows", 120):
-    print(SHAP_DIR.groupby(["cohort", "model"]).agrees_with_prior.mean().round(3).to_string()); print(SHAP_IG.round(3).to_string(index=False))
+    print(SHAP_DIRSUM.round(3).to_string(index=False)); print(SHAP_IG.round(3).to_string(index=False))
     print(REASON.round(3).to_string(index=False)); print(SCORECARD.round(4).to_string(index=False))
 print(f"CELL PH4 OK | SHAP, reasoning summary, audit, references, scorecard and two figures | {time.perf_counter() - _t0:.0f}s")
 ########## CELL 41 | end ##########
@@ -4502,7 +4507,7 @@ Train-by-test AUROC matrix (seed 0):
 
 {md_table(T["tablePH09_transport_matrix"], 4)}
 
-Intercept-only recalibration in the target (1,000 participants, target labels used):
+Intercept-only recalibration in the target: the intercept is estimated on a random sample of {CFG.recal_n:,} target participants (target labels used; the same sample for every model) and evaluated on the remaining target participants. With few events in that sample the estimated shift is imprecise, so calibration-in-the-large after recalibration need not be near zero; the calibration-sample columns show why.
 
 {md_table(T["tablePH10_intercept_recalibration"], 4)}
 
@@ -4518,9 +4523,9 @@ RICH one-step progression (baseline FPG below 5.6 mmol/L; outcome FPG of 5.6 mmo
 
 {md_table(T["tablePH13_rich_progression"], 4)}
 
-SHAP direction against the priors (share of constrained predictors whose SHAP dependence has the prior's sign) and agreement with integrated gradients:
+SHAP direction against the priors (number and share of constrained predictors whose SHAP dependence has the prior's sign; per predictor in table PH16) and agreement with integrated gradients:
 
-{md_table(T["tablePH16_shap_direction_vs_prior"].groupby(["cohort", "model"]).agrees_with_prior.mean().reset_index(), 3)}
+{md_table(T["tablePH23_shap_direction_summary"], 3)}
 
 {md_table(T["tablePH17_shap_vs_integrated_gradients"], 3)}
 
