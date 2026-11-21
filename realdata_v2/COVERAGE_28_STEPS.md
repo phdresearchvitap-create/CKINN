@@ -1,5 +1,54 @@
 # Coverage of the 28-step protocol and the original proposal by the real-data notebook
 
+**Updated 2026-11-21 after the post hoc block (cells PH1 to PH4, label PH).** The first table gives the current status of every step; the original review (before the post hoc block) follows unchanged below it, so the change can be traced. Post hoc analyses were decided after the v2 results had been seen; they cannot support a confirmatory claim and do not change any v2 verdict (`protocol_v2.md`, section 10).
+
+## Current status (after the post hoc block)
+
+| Status | Steps | Count |
+| --- | --- | --- |
+| Covered (v2 or post hoc) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 27 | 22 |
+| Partly covered (the rest is not possible on real data or needs people) | 12, 13, 25 | 3 |
+| Not covered (a decision, not an analysis) | 26 | 1 |
+| Not possible on real data | 11 | 1 |
+| Not in the PDF | 28 | 1 |
+
+| Step | Status now | What closed it, and what remains |
+| --- | --- | --- |
+| 1 | Covered | protocol_v2.md (unchanged). |
+| 2 | Covered (PH) | BMI 24 versus 35 in the same held-out people and model-agnostic violation rates for every model (tables PH05, PH06), beside the derivative-based rates of M1, M2, CKINN. Caveat: BMI 35 with an unchanged waist is an implausible combination (ERRORS B8). |
+| 3 | Covered | A (NHANES) and B (NAGALA, RICH) in v2; B with glucose and HbA1c is tier T3; C as a one-step progression in RICH (table PH13). |
+| 4 | Covered | Unchanged. |
+| 5 | Covered (PH) | Predictor audit table with missingness, leakage risk, fairness relevance and prior sign (PH19); proposal variables the data lack (PH20). |
+| 6 | Covered (PH) | One PubMed-verified reference per row (references.md, PH21), found after the table was frozen; DBP constrained in a post hoc CKINN variant (PH07). The headline table still leaves DBP unconstrained, as frozen. |
+| 7 | Covered | Unchanged. |
+| 8 | Covered (PH) | LR, M2 and CKINN with balanced class weights against unweighted (PH07, variant `class_weights`). |
+| 9 | Covered | Unchanged; the grid differs from the card's. |
+| 10 | Covered (PH) | Older-and-lean subgroup across the lambda path (PH11); not estimable where it has fewer than 20 events. |
+| 11 | Not possible on real data | No simulated physiological state exists. |
+| 12 | Partly | Train-by-test matrix for every model, seed 0 (PH09). The S1+S2-to-S3 run remains impossible: NHANES has a different outcome. |
+| 13 | Partly | The card's primary endpoint (on S3 at 30% missingness) is not computable on real data; v2 froze H1 instead. |
+| 14 | Covered (PH) | SHAP for LR, XGBoost, monotone XGBoost, M1, M2, CKINN (PH15 to PH17), partial-dependence plots (figure PH1), integrated gradients (v2). Fidelity to generator weights is impossible on real data. |
+| 15 | Covered (PH) | Reasoning text for 50 people per cohort with a sign-consistency flag and a blood-panel counterfactual worded as model behaviour (summary PH18; texts in the local cache only). |
+| 16 | Covered (PH) | AUPRC and false-negative rate by group (PH14); socio-economic groups do not exist in the data. |
+| 17 | Covered | v2, plus intercept-only recalibration (PH10). |
+| 18 | Covered | Unchanged. |
+| 19 | Covered (PH) | SVM added (PH01, PH03), 5 repeats of 5-fold CV. |
+| 20 | Covered (PH) | M4 pooled training with a cohort indicator (PH08, within the two training cohorts only), M5 group weights and an HDL wrong-sign control (PH07). |
+| 21 | Covered (PH) | TG/HDL ratio with its own sign (PH07); standardisation stays on training statistics only (ERRORS B16). |
+| 22 | Covered (PH) | RQ7 among people with baseline fasting glucose below 5.6 mmol/L (PH12). |
+| 23 | Covered | Unchanged. |
+| 24 | Covered (PH) | One scorecard (PH22); clinical expert agreement is not possible without clinicians. |
+| 25 | Partly | Dated PubMed search logged (NOVELTY_SEARCH.md); a systematic search in Embase, Scopus, IEEE Xplore, ACM and arXiv is still needed. |
+| 26 | Not covered | The decision to put a knowledge graph in or out of paper 1 is the investigator's and supervisor's. |
+| 27 | Covered (PH) | Layer 4 (reasoning text) and the scorecard added. |
+| 28 | Not in the PDF | The 28-step PDF stops in step 27; the proposal's section 28 is the title. |
+
+Proposal-only items now: one-step progression done (RICH, PH13); NHANES "told of prediabetes" and "told of hypertension" tried as inputs (PH07, exploratory); glucose-insulin equations and knowledge graph not attempted; no Indian cohort; expert agreement impossible without clinicians.
+
+---
+
+# Original review (before the post hoc block)
+
 Prepared 2026-11-21 from: `CKINN_OBJ1.pdf` (original proposal, 26 pages), `CKINN_28-Step_Protocol.pdf` (11 pages), `CKINN_vs_MLP_real_data_final.ipynb` (44 cells, byte-identical to the repository's v2 clean notebook, no outputs), and the stored v2 results in `outputs_v2_full/`. Statuses come from reading the notebook code and the stored tables, not from the notebook's own claims. Code occurrences were also searched (for example SHAP, SVM, counterfactual, class weights: none found in the notebook).
 
 ## What the documents are

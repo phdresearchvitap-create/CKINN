@@ -11,7 +11,11 @@ Re-analysis of the version 1 real-data study (CKINN against the plain networks M
 | `AUDIT.md`, `audit/` | Findings on version 1 with evidence; `audit/audit_checks.py` prints every number quoted. |
 | `protocol_v2.md` | Frozen protocol with amendment log, labels (P1, P2, E, PH) and the configuration hash. |
 | `CHANGELOG.md` | What changed from version 1, in engineering terms. |
-| `references.md` | References and their verification status. |
+| `references.md` | References and their verification status, including one PubMed-verified reference per sign-table row. |
+| `ERRORS_OBJECTIVE1.md` | Errors and risks found in the proposal (CKINN_OBJ1.pdf), the 28-step protocol PDF and the earlier coverage file. |
+| `COVERAGE_28_STEPS.md` | Status of each of the 28 steps and of the proposal-only items after the post hoc block. |
+| `NOVELTY_SEARCH.md` | Dated PubMed search for the novelty statement (step 25). |
+| `CKINN_vs_MLP_real_data_final_cells.txt` | Every notebook cell in order, ready to paste into Colab. |
 | `verification/` | Independent recomputation from the saved predictions by a separate agent that did not write the code (its own scikit-learn script, prompt and output: 233 of 233 checks match). |
 | `outputs_v2_full/` | Tables (CSV), figures (PDF and 300 dpi PNG), LaTeX tables, `report/report.md`, `report/methods_results_draft.md`, `report/TRIPOD_AI_checklist.md`, manifest and hashes, and the archive `ckinn_v2_outputs_full.zip`. No row-level data. |
 | `ckv2/`, `tests/` | Library and unit tests (the notebook carries identical copies). |

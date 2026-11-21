@@ -1,5 +1,17 @@
 # Changelog
 
+## v2 + post hoc block (2026-11-21)
+
+Added after the v2 results had been seen, to cover the 28-step protocol where the data allow it; logged in `protocol_v2.md` section 10 and labelled PH everywhere. No v2 verdict, configuration or hash changes.
+
+- `ckv2/posthoc.py`: permutation-sampling SHAP (log-odds scale, additive by construction), model-agnostic perturbation violations, BMI 24/35 pairs, reasoning-text inputs and a fixed reasoning-text template, balanced and group weights, Wilson intervals, task builders for every post hoc analysis, predictor audit table, sign-table references.
+- Engine: test sets can set a predictor to a fixed value; tasks can run perturbation, SHAP and reasoning probes.
+- Models: SVM by Nystroem radial-kernel approximation with a linear SVM and Platt scaling.
+- Data: TG/HDL ratio in all cohorts; NHANES "told of prediabetes" and "told of hypertension"; RICH final-visit fasting glucose (outcome of the progression analysis only, never an input).
+- Notebook: cells PH1 to PH4 (fits; reproducibility, SVM, violations, variants, pooled indicator; transport matrix, recalibration, stress test, RQ7, progression, group AUPRC; SHAP, reasoning summary, audit, references, scorecard, two figures); report section 12.
+- Tests: 38 (SHAP exactness on a linear model, perturbation violations, reasoning wording, weights, Wilson, progression label, SVM).
+- Documents: `ERRORS_OBJECTIVE1.md`, `NOVELTY_SEARCH.md`, sign-table references in `references.md`, corrected `COVERAGE_28_STEPS.md`.
+
 ## v2 (2026-11-20)
 
 Analysis changes are amendments A1 to A19 of `protocol_v2.md` (decided after the v1 results were seen, before any v2 result). This list covers the code.
