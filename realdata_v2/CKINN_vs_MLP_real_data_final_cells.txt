@@ -1,8 +1,8 @@
-CKINN versus M1 and M2 on real data, version 2: complete notebook code, cell by cell
+CKINN versus M1 and M2 on real data, version 2 with the post hoc block: complete notebook code, cell by cell
 Source: CKINN_vs_MLP_real_data_final.ipynb (identical text). Create one Colab cell per block below, in order.
-Code cells: paste everything between the markers into a code cell. A cell that starts with %%writefile must keep that line first.
+Code cells: paste only the lines between the markers (not the marker lines). A cell that starts with %%writefile must keep that line first.
 Markdown cells: optional (text only); paste into a text cell if you want the headings.
-Before cell 01, set CKINN_REAL_MODE, CKINN_DATA_DIR and CKINN_OUT_DIR (see README.md), or edit the defaults in cell 01.
+Before CELL 01, set CKINN_REAL_MODE (smoke first, then full), CKINN_DATA_DIR and CKINN_OUT_DIR, or edit the defaults in CELL 01.
 
 ########## CELL 00 | MARKDOWN | start ##########
 # CKINN versus M1 and M2 on real data, version 2
@@ -11,7 +11,7 @@ Before cell 01, set CKINN_REAL_MODE, CKINN_DATA_DIR and CKINN_OUT_DIR (see READM
 This notebook carries out `protocol_v2.md`. Version 1 (`CKINN_real_data_study.ipynb`) and its results are the record; every change is an amendment listed in protocol section 2, decided after the version 1 results were seen. `AUDIT.md` gives the reasons.
 
 **Research-integrity rules followed here**
-1. Every number in a table, figure or report is computed by a cell from stored outputs; none is typed. Cell 41 checks that no markdown cell holds a result-like number and that every number in the report traces to a stored table.
+1. Every number in a table, figure or report is computed by a cell from stored outputs; none is typed. The integrity cell near the end checks that no markdown cell holds a result-like number and that every number in the report traces to a stored table.
 2. Nothing is tuned to favour CKINN. M1, M2 and CKINN get the same tuning budget; lambda follows a rule declared before any v2 result.
 3. No evaluation row is used for fitting, tuning, threshold choice or lambda choice. Development rows are used only for tuning; thresholds come from an inner validation split of each training fold.
 4. NULL and negative results are reported as found. Each analysis is labelled P1 (pre-specified in v1), P2 (pre-specified in v2), E (exploratory) or PH (post hoc).
@@ -189,6 +189,12 @@ GROUP_OF = {**{c: "demo" for c in ("age_years", "sex_female", "smoker", "alcohol
             **{c: "clin" for c in ("bmi_kgm2", "waist_cm", "sbp_mmHg", "dbp_mmHg")},
             **{c: "panel" for c in PANEL}, **{c: "glyc" for c in GLYC}}
 GROUPS = ("demo", "clin", "panel", "glyc")
+# Post hoc features (protocol_v2.md section 10, PH): history questions in NHANES, the TG/HDL ratio, a cohort indicator for pooled
+# training. They are outside ALL_FEATURES, so no pre-specified feature set or the configuration hash changes.
+PH_FEATURES = ("prediabetes_told", "hypertension_told", "tg_hdl_ratio", "cohort_rich")
+GROUP_OF.update({"prediabetes_told": "demo", "hypertension_told": "demo", "cohort_rich": "demo", "tg_hdl_ratio": "panel"})
+BINARY = BINARY + ("prediabetes_told", "hypertension_told", "cohort_rich")
+LOG_COLS = LOG_COLS + ("tg_hdl_ratio",)
 RANGES = {"age_years": (18, 100), "bmi_kgm2": (12, 70), "waist_cm": (40, 190), "sbp_mmHg": (60, 260), "dbp_mmHg": (30, 160),
           "tg_mmol": (0.05, 60), "hdl_mmol": (0.1, 10), "ldl_mmol": (0.2, 15), "tc_mmol": (1.0, 20), "alt_u_l": (1, 2000),
           "ast_u_l": (1, 2000), "ggt_u_l": (1, 5000), "fpg_mmol": (2.0, 30), "hba1c_pct": (3.0, 18)}
@@ -292,6 +298,7 @@ def load_nagala(raw: pd.DataFrame) -> pd.DataFrame:
     d["tg_mmol"], d["hdl_mmol"], d["tc_mmol"] = n.tg.where(n.tg > 0), n.hdl.where(n.hdl > 0), n.tc
     d["alt_u_l"], d["ast_u_l"], d["ggt_u_l"] = n.alt.where(n.alt > 0), n.ast.where(n.ast > 0), n.ggt
     d["fpg_mmol"], d["hba1c_pct"] = n.fpg, n.a1c
+    d["tg_hdl_ratio"] = d.tg_mmol / d.hdl_mmol                          # post hoc feature (PH)
     d["cohort"], d["site"], d["task"] = "NAGALA", "0", "B"
     d["label"] = n.incident.astype(float)
     d["follow_years"] = n.fu_days / 365.25
@@ -312,6 +319,8 @@ def load_rich(raw: pd.DataFrame) -> pd.DataFrame:
     for c_out, c_in in (("tg_mmol", "tg"), ("hdl_mmol", "hdl"), ("ldl_mmol", "ldl"), ("alt_u_l", "alt"), ("ast_u_l", "ast")):
         d[c_out] = r[c_in].where(r[c_in] > 0)                                # exact zeros = not measured (A12)
     d["tc_mmol"], d["fpg_mmol"] = r.tc, r.fpg
+    d["tg_hdl_ratio"] = d.tg_mmol / d.hdl_mmol                          # post hoc feature (PH)
+    d["fpg_final"] = r.fpg_final                                        # final-visit FPG: post hoc progression analysis only, never a predictor
     d["cohort"], d["site"], d["task"] = "RICH", r.site.astype(int).astype(str), "B"
     d["label"] = r.event.astype(float)
     d["follow_years"] = r.fu_years
@@ -337,6 +346,9 @@ def load_nhanes(raw: pd.DataFrame) -> pd.DataFrame:
     d["alt_u_l"], d["ast_u_l"], d["ggt_u_l"] = h.LBXSATSI, h.LBXSASSI, h.LBXSGTSI
     fpg_all = h.LBXGLU / 18.016
     d["fpg_mmol"], d["hba1c_pct"] = fpg_all, h.LBXGH
+    d["tg_hdl_ratio"] = d.tg_mmol / d.hdl_mmol                          # post hoc features (PH): ratio and history questions
+    d["prediabetes_told"] = np.where(h.DIQ160 == 1, 1.0, np.where(h.DIQ160 == 2, 0.0, np.nan))
+    d["hypertension_told"] = np.where(h.BPQ020 == 1, 1.0, np.where(h.BPQ020 == 2, 0.0, np.nan))
     # v1 label (kept for the sensitivity analysis)
     known = (h.DIQ010 == 1)
     lab_v1 = np.where(fpg_all.notna() | h.LBXGH.notna(), ((fpg_all.fillna(-1) >= 7.0) | (h.LBXGH.fillna(-1) >= 6.5)).astype(float), np.nan)
@@ -841,7 +853,7 @@ class ConstrainedLR:
 
 
 class Fitted:
-    """name in LR, cLR, GAM, RF, XGB, XGB_mono, LGBM, LGBM_mono, MI_LR, LR_aug, XGB_aug, M1, M2, CKINN."""
+    """name in LR, cLR, GAM, RF, XGB, XGB_mono, LGBM, LGBM_mono, MI_LR, LR_aug, XGB_aug, M1, M2, CKINN, and the post hoc SVM."""
 
     def __init__(self, name: str, features: Sequence[str], hp: dict, seed: int, cfg, signs: Optional[Dict[str, int]] = None,
                  lam: float = 0.0):
@@ -934,6 +946,14 @@ class Fitted:
                 Zi = imp.fit_transform(Za[:, keep])
                 self.imputers.append(imp)
                 self.mi_models.append(LogisticRegression(C=hp["C"], max_iter=3000).fit(Zi, ya, sample_weight=wa))
+        elif name == "SVM":
+            from sklearn.kernel_approximation import Nystroem
+            from sklearn.svm import LinearSVC
+            self.prep = Prep(self.features, cfg.winsor).fit(a)
+            self.kmap = Nystroem(kernel="rbf", n_components=min(300, len(a)), random_state=seed % (2 ** 31 - 1)).fit(self._design_lr(a))
+            self.model = LinearSVC(C=hp["C"], dual=False, max_iter=5000).fit(self.kmap.transform(self._design_lr(a)), ya, sample_weight=wa)
+            db = self.model.decision_function(self.kmap.transform(self._design_lr(b)))
+            self.platt = LogisticRegression(C=1e6, max_iter=1000).fit(db.reshape(-1, 1), yb)
         elif name == "RF":
             R = a[self.features].to_numpy(float)
             self.med = np.nan_to_num(np.nanmedian(R, axis=0), nan=0.0)
@@ -970,6 +990,8 @@ class Fitted:
             return self.model.predict_proba(self._design_lr(df))[:, 1]
         if name == "GAM":
             return self.model.predict_proba(self._design_gam(df))[:, 1]
+        if name == "SVM":
+            return self.platt.predict_proba(self.model.decision_function(self.kmap.transform(self._design_lr(df))).reshape(-1, 1))[:, 1]
         if name == "MI_LR":
             X, M = self.prep.transform(df)
             Z = np.where(M == 1, X, np.nan).astype(np.float64)[:, self.mi_keep]
@@ -1438,6 +1460,8 @@ def run_task(spec: dict, cfg) -> dict:
         if t.get("corrupt"):
             mech, rate, cseed = t["corrupt"]
             df = corrupt(df, spec["feats"], mech, rate, cseed)
+        for f, v in (t.get("set") or {}).items():                      # post hoc: set a predictor to a fixed value (BMI 24 / 35)
+            df[f] = float(v)
         out["preds"][t["tag"]] = fm.predict(df).astype(np.float32)
     nn = spec["model"] in ("M1", "M2", "CKINN")
     if nn and spec.get("explain"):
@@ -1479,6 +1503,27 @@ def run_task(spec: dict, cfg) -> dict:
                 curve.append(float(fm.predict(d2).mean()))
             res[f] = {"grid": grid, "pd": np.array(curve)}
         out["pd"] = res
+    if spec.get("perturb"):
+        from .posthoc import perturbation_violations
+        pz = spec["perturb"]
+        df = frame(pz["frame"]).iloc[pz["idx"]].reset_index(drop=True)
+        out["perturb"] = perturbation_violations(fm.predict, df, tr, pz["signs"], spec["feats"], pz["delta_sd"], cfg.viol_tol * pz["delta_sd"])
+    if spec.get("shap"):
+        from .posthoc import permutation_shap
+        sh = spec["shap"]
+        df = frame(sh["frame"]).iloc[sh["idx"]].reset_index(drop=True)
+        rng = np.random.default_rng(sh["seed"])
+        bg = tr.iloc[rng.choice(len(tr), min(sh["n_bg"], len(tr)), replace=False)].reset_index(drop=True)
+        phi, base, fx = permutation_shap(fm.predict, df, bg, spec["feats"], sh["n_perm"], rng)
+        out["shap"] = {"phi": phi.astype(np.float32), "base": base, "fx": fx.astype(np.float32),
+                       "x": df[spec["feats"]].to_numpy(float).astype(np.float32), "feats": list(spec["feats"])}
+        if spec.get("reason"):
+            from .posthoc import reasoning_inputs
+            rz = spec["reason"]
+            k = min(rz["n"], len(df))
+            out["reason"] = reasoning_inputs(fm.predict, df.iloc[:k].reset_index(drop=True), tr, rz["signs"], spec["feats"],
+                                             rz["delta_sd"], cfg.viol_tol * rz["delta_sd"], rz["panel"])
+            out["reason"]["phi"] = phi[:k].astype(np.float32)
     out["seconds"] = time.perf_counter() - t0
     return out
 
@@ -2168,6 +2213,360 @@ def parallel_map(fn, items, n_workers):
 ########## CELL 13 | end ##########
 
 ########## CELL 14 | CODE | start ##########
+%%writefile ckv2_lib/ckv2/posthoc.py
+"""Post hoc additions for the 28-step protocol (protocol_v2.md, section 10; label PH).
+
+Decided after the v2 results had been seen, to cover protocol steps the v2 analysis left partly or not covered. None of these
+analyses enters a hypothesis family or changes a v2 verdict; the frozen configuration and its hash are untouched.
+Model fits that repeat a main-run fit use the same seed and rows, so their unmodified predictions must equal the stored ones
+(checked in the notebook as a reproducibility test).
+"""
+from typing import Dict, List, Optional, Sequence
+
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import StratifiedKFold, train_test_split
+
+from .config import BINARY, C_GRID, MAIN_MODELS, PANEL, RUN0_EXTRA, seed_for
+from .plan import fit_seed, signs_for, tid
+
+SHAP_MODELS = ("LR", "XGB", "XGB_mono", "M1", "M2", "CKINN")
+REFIT_MODELS = tuple(MAIN_MODELS) + tuple(RUN0_EXTRA) + ("SVM",)
+TRANSPORT_EXTRA = ("RF", "LGBM", "LGBM_mono", "cLR", "GAM", "SVM", "MI_LR")
+PROGRESSION_MODELS = ("LR", "XGB_mono", "M1", "M2", "CKINN")
+TASK_LABEL = {"A": "undiagnosed diabetes", "B": "incident type 2 diabetes during follow-up"}
+
+# One PubMed-verified reference per sign-table row (references.md); found after the table was frozen.
+SIGN_CITATIONS = {
+    "age_years": (17533210, "Wilson et al. 2007, Arch Intern Med (Framingham Offspring)"),
+    "bmi_kgm2": (20493574, "Abdullah et al. 2010, Diabetes Res Clin Pract (meta-analysis)"),
+    "waist_cm": (17494056, "Vazquez et al. 2007, Epidemiol Rev (meta-analysis)"),
+    "sbp_mmHg": (26429079, "Emdin et al. 2015, J Am Coll Cardiol (4.1 million adults and meta-analysis)"),
+    "dbp_mmHg": (26429079, "Emdin et al. 2015, J Am Coll Cardiol (4.1 million adults and meta-analysis)"),
+    "family_history_dm": (23052052, "InterAct Consortium 2013, Diabetologia"),
+    "tg_mmol": (17533210, "Wilson et al. 2007, Arch Intern Med (Framingham Offspring)"),
+    "hdl_mmol": (17533210, "Wilson et al. 2007, Arch Intern Med (Framingham Offspring)"),
+    "exercise_regular": (26092138, "Aune et al. 2015, Eur J Epidemiol (meta-analysis)"),
+    "fpg_mmol": (17533210, "Wilson et al. 2007, Arch Intern Med (Framingham Offspring)"),
+    "hba1c_pct": (20587727, "Zhang et al. 2010, Diabetes Care (systematic review)"),
+}
+
+LABELS = {"age_years": "age", "sex_female": "female sex", "bmi_kgm2": "BMI", "waist_cm": "waist circumference", "sbp_mmHg": "systolic BP",
+          "dbp_mmHg": "diastolic BP", "smoker": "current smoking", "alcohol_level": "alcohol intake", "exercise_regular": "regular exercise",
+          "family_history_dm": "family history of diabetes", "tg_mmol": "triglycerides", "hdl_mmol": "HDL cholesterol",
+          "ldl_mmol": "LDL cholesterol", "tc_mmol": "total cholesterol", "alt_u_l": "ALT", "ast_u_l": "AST", "ggt_u_l": "GGT",
+          "fpg_mmol": "fasting glucose", "hba1c_pct": "HbA1c", "tg_hdl_ratio": "TG/HDL ratio", "prediabetes_told": "told of prediabetes",
+          "hypertension_told": "told of hypertension"}
+
+
+def settings(cfg) -> dict:
+    if cfg.mode == "full":
+        return {"pair_rows": 1000, "shap_rows": 200, "n_bg": 50, "n_perm": 8, "reason_n": 50, "delta_sd": 0.25}
+    return {"pair_rows": 150, "shap_rows": 30, "n_bg": 15, "n_perm": 4, "reason_n": 10, "delta_sd": 0.25}
+
+
+def _logit(p):
+    p = np.clip(np.asarray(p, float), 1e-6, 1 - 1e-6)
+    return np.log(p / (1 - p))
+
+
+# ------------------------------------------------------------------ probes run inside the worker
+def perturbation_violations(predict, df: pd.DataFrame, tr: pd.DataFrame, signs: Dict[str, int], feats: Sequence[str], delta_sd: float,
+                            tol: float) -> Dict[str, dict]:
+    """Model-agnostic violation rate (step 2): continuous predictors raised by delta_sd training SDs, binary predictors moved from 0 to
+    1, observed values only; a violation is a sign-adjusted change of the log-odds below -tol. Works for every model."""
+    z0 = _logit(predict(df))
+    res = {}
+    for f, s in signs.items():
+        if f not in feats:
+            continue
+        v = df[f].to_numpy(float)
+        obs = ~np.isnan(v)
+        d2 = df.copy()
+        if f in BINARY:
+            rows = obs & (v == 0)
+            d2.loc[rows, f] = 1.0
+        else:
+            rows = obs
+            d2.loc[rows, f] = v[rows] + delta_sd * float(np.nanstd(tr[f].to_numpy(float)))
+        if not rows.any():
+            res[f] = {"n": 0, "viol": 0, "mean_change": float("nan")}
+            continue
+        ch = s * (_logit(predict(d2)) - z0)[rows]
+        res[f] = {"n": int(rows.sum()), "viol": int((ch < -tol).sum()), "mean_change": float(ch.mean())}
+    return res
+
+
+def permutation_shap(predict, rows: pd.DataFrame, bg: pd.DataFrame, feats: Sequence[str], n_perm: int, rng):
+    """Interventional SHAP values on the log-odds scale by permutation sampling with antithetic permutations and a background sample
+    of training rows. Additive by construction: phi.sum(1) == fx - base for every row."""
+    feats = list(feats)
+    Xr, B = rows[feats].to_numpy(float), bg[feats].to_numpy(float)
+    nb, p = B.shape
+    half = max(1, n_perm // 2)
+    base = float(_logit(predict(pd.DataFrame(B, columns=feats))).mean())
+    phi, fx = np.zeros((len(Xr), p)), np.zeros(len(Xr))
+    for i in range(len(Xr)):
+        perms = [rng.permutation(p) for _ in range(half)]
+        perms += [q[::-1] for q in perms]
+        blocks = []
+        for q in perms:
+            cur = B.copy()
+            blocks.append(cur.copy())
+            for j in q:
+                cur[:, j] = Xr[i, j]
+                blocks.append(cur.copy())
+        v = _logit(predict(pd.DataFrame(np.vstack(blocks), columns=feats))).reshape(len(perms), p + 1, nb).mean(axis=2)
+        for k, q in enumerate(perms):
+            phi[i, q] += np.diff(v[k])
+        phi[i] /= len(perms)
+        fx[i] = v[0, -1]
+    return phi, base, fx
+
+
+def reasoning_inputs(predict, rows: pd.DataFrame, tr: pd.DataFrame, signs: Dict[str, int], feats: Sequence[str], delta_sd: float, tol: float,
+                     panel: Sequence[str]) -> dict:
+    """Inputs for the patient-level reasoning text (steps 15 and 27): predicted probability, point-wise check of every constrained
+    predictor, and the model's response when each blood-panel value is set to the training median (a model response, not advice)."""
+    p0 = predict(rows)
+    z0 = _logit(p0)
+    cfeats = [f for f in signs if f in feats]
+    viol = np.zeros((len(rows), len(cfeats)), bool)
+    tested = np.zeros((len(rows), len(cfeats)), bool)
+    for j, f in enumerate(cfeats):
+        v = rows[f].to_numpy(float)
+        obs = ~np.isnan(v)
+        d2 = rows.copy()
+        if f in BINARY:
+            d2.loc[obs, f] = 1.0 - v[obs]
+            direction = np.where(v == 0, 1.0, -1.0)
+        else:
+            d2.loc[obs, f] = v[obs] + delta_sd * float(np.nanstd(tr[f].to_numpy(float)))
+            direction = np.ones(len(v))
+        ch = signs[f] * direction * (_logit(predict(d2)) - z0)
+        viol[:, j], tested[:, j] = obs & (ch < -tol), obs
+    cf = [f for f in panel if f in feats]
+    med = {f: float(np.nanmedian(tr[f].to_numpy(float))) for f in cf}
+    p_cf = np.full((len(rows), len(cf)), np.nan)
+    for j, f in enumerate(cf):
+        obs = rows[f].notna().to_numpy()
+        d2 = rows.copy()
+        d2.loc[obs, f] = med[f]
+        p_cf[obs, j] = predict(d2)[obs]
+    return {"p": np.asarray(p0, float), "constrained": cfeats, "viol_point": viol, "tested": tested, "cf_feats": cf, "medians": med,
+            "p_cf": p_cf, "x": rows[list(feats)].to_numpy(float), "feats": list(feats)}
+
+
+def reasoning_text(rec: dict, i: int, task: str) -> str:
+    """Fixed template (steps 15 and 27): top three contributions with direction, constraint consistency, one blood-panel counterfactual.
+    Worded as the model's behaviour; never as a diagnosis or advice."""
+    feats, phi, x, p = rec["feats"], rec["phi"][i], rec["x"][i], rec["p"][i]
+    order = [j for j in np.argsort(-np.abs(phi)) if abs(phi[j]) > 0][:3]
+    parts = []
+    for j in order:
+        val = "not recorded" if np.isnan(x[j]) else f"{x[j]:.3g}"
+        parts.append(f"{LABELS.get(feats[j], feats[j])} ({val}) {'raises' if phi[j] > 0 else 'lowers'} the model's estimate")
+    text = [f"Predicted probability of {TASK_LABEL[task]}: {p:.1%}.",
+            "Largest contributions on the log-odds scale: " + ("; ".join(parts) if parts else "none") + "."]
+    bad = [LABELS.get(f, f) for f, b in zip(rec["constrained"], rec["viol_point"][i]) if b]
+    text.append("At these values the model's response agrees with every clinical prior it was given." if not bad
+                else "At these values the model's response runs against the clinical prior for: " + ", ".join(bad) + ".")
+    best, best_drop = None, 0.0
+    for j, f in enumerate(rec["cf_feats"]):
+        if np.isfinite(rec["p_cf"][i, j]) and p - rec["p_cf"][i, j] > best_drop:
+            best, best_drop = j, p - rec["p_cf"][i, j]
+    if best is None:
+        text.append("Setting any one blood-panel value to the training median would not lower the model's estimate.")
+    else:
+        f = rec["cf_feats"][best]
+        text.append(f"With {LABELS.get(f, f)} at the training median ({rec['medians'][f]:.3g}) the model's predicted probability would be "
+                    f"{rec['p_cf'][i, best]:.1%} instead of {p:.1%}.")
+    text.append("This describes the model's behaviour; it is not a diagnosis or a recommendation.")
+    return " ".join(text)
+
+
+# ------------------------------------------------------------------ weights
+def balanced_weights(y: np.ndarray) -> np.ndarray:
+    y = np.asarray(y).astype(int)
+    n, n1 = len(y), max(int(y.sum()), 1)
+    w = np.where(y == 1, n / (2 * n1), n / (2 * max(n - n1, 1)))
+    return w / w.mean()
+
+
+def group_weights(fr: pd.DataFrame) -> np.ndarray:
+    """Inverse-frequency weights over sex x age band, mean 1 (ablation M5, the v1 fairness weighting)."""
+    g = fr["sex"].astype(str) + "|" + fr["age_band"].astype(str)
+    w = 1.0 / g.map(g.value_counts()).to_numpy(float)
+    return w / w.mean()
+
+
+def wilson(k: int, n: int, z: float = 1.959964) -> tuple:
+    if n == 0:
+        return float("nan"), float("nan")
+    p = k / n
+    d = 1 + z * z / n
+    c = (p + z * z / (2 * n)) / d
+    h = z * np.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
+    return float(c - h), float(c + h)
+
+
+# ------------------------------------------------------------------ task specifications
+def svm_tune_specs(cohort: str, dev: pd.DataFrame, feats: Sequence[str], cfg) -> List[dict]:
+    folds = list(StratifiedKFold(cfg.tune_folds, shuffle=True, random_state=seed_for("devcv", cohort)).split(dev, dev.y))
+    grid = C_GRID if cfg.mode == "full" else C_GRID[1:3]
+    return [{"id": tid("phtune", cohort, "SVM", f"c{ci}", f"k{k}"), "model": "SVM", "feats": list(feats), "hp": {"C": c},
+             "seed": seed_for("devfit", cohort, k), "train_frame": f"{cohort}_dev", "train_idx": i,
+             "tests": [{"tag": "val", "frame": f"{cohort}_dev", "idx": j}], "_val_idx": j, "_model": "SVM", "_ci": ci}
+            for ci, c in enumerate(grid) for k, (i, j) in enumerate(folds)]
+
+
+def refit_specs(cohort: str, folds, feats: Sequence[str], HP, LAM, cfg) -> List[dict]:
+    """Repeat 0, seed index 0, every model: identical to the main fit, plus BMI 24/35 pairs, perturbation violations, SHAP and the
+    reasoning inputs."""
+    st = settings(cfg)
+    sg = signs_for("T2", feats)
+    specs = []
+    for k, (i, j) in enumerate(folds[0]):
+        pr = np.sort(np.random.default_rng(seed_for("phpairs", cohort, k)).choice(j, min(st["pair_rows"], len(j)), replace=False))
+        tests = [{"tag": "none", "frame": cohort, "idx": j}]
+        if "bmi_kgm2" in feats:
+            tests += [{"tag": "bmi24", "frame": cohort, "idx": pr, "set": {"bmi_kgm2": 24.0}},
+                      {"tag": "bmi35", "frame": cohort, "idx": pr, "set": {"bmi_kgm2": 35.0}}]
+        sr = np.sort(np.random.default_rng(seed_for("phshap", cohort)).choice(j, min(st["shap_rows"], len(j)), replace=False))
+        for m in REFIT_MODELS:
+            hp_key = {"MI_LR": "LR", "LR_aug": "LR", "XGB_aug": "XGB"}.get(m, m)
+            spec = {"id": tid("ph", cohort, "T2", "refit", "r0", f"k{k}", m, "s0"), "model": m, "feats": list(feats), "hp": HP[(cohort, hp_key)],
+                    "seed": fit_seed(cohort, "T2", 0, k, 0), "signs": sg, "lam": LAM[(cohort, "T2")] if m == "CKINN" else 0.0,
+                    "train_frame": cohort, "train_idx": i, "tests": tests,
+                    "perturb": {"frame": cohort, "idx": pr, "signs": sg, "delta_sd": st["delta_sd"]}, "_k": k, "_model": m, "_pairs": pr}
+            if k == 0 and m in SHAP_MODELS:
+                spec["shap"] = {"frame": cohort, "idx": sr, "n_bg": st["n_bg"], "n_perm": st["n_perm"], "seed": seed_for("phshapbg", cohort)}
+                if m == "CKINN":
+                    spec["reason"] = {"n": st["reason_n"], "signs": sg, "delta_sd": st["delta_sd"], "panel": [f for f in PANEL if f in feats]}
+            specs.append(spec)
+    return specs
+
+
+def variant_list(cohort: str, feats: Sequence[str]) -> List[tuple]:
+    """(variant, model, features, sign table, weights) for the repeat-0 post hoc variants."""
+    sg = signs_for("T2", feats)
+    out = []
+    if "dbp_mmHg" in feats:
+        out.append(("dbp_constrained", "CKINN", list(feats), dict(sg, dbp_mmHg=1), None))
+    if "hdl_mmol" in sg:
+        out.append(("wrong_hdl", "CKINN", list(feats), dict(sg, hdl_mmol=-sg["hdl_mmol"]), None))
+    out.append(("m5_group_weights", "CKINN", list(feats), sg, "group"))
+    for m in ("LR", "M2", "CKINN"):
+        out.append(("class_weights", m, list(feats), sg, "balanced"))
+    if "tg_mmol" in feats and "hdl_mmol" in feats:
+        for m in ("LR", "M2", "CKINN"):
+            out.append(("tg_hdl_ratio", m, list(feats) + ["tg_hdl_ratio"], dict(sg, tg_hdl_ratio=1), None))
+    if cohort == "NHANES":
+        for m in ("LR", "M2", "CKINN"):
+            out.append(("history_questions", m, list(feats) + ["prediabetes_told", "hypertension_told"],
+                        dict(sg, prediabetes_told=1, hypertension_told=1), None))
+    return out
+
+
+def variant_specs(cohort: str, folds, feats: Sequence[str], HP, LAM, cfg, fr: pd.DataFrame) -> List[dict]:
+    specs = []
+    for k, (i, j) in enumerate(folds[0]):
+        for v, m, fts, sg, wkind in variant_list(cohort, feats):
+            w = None
+            if wkind == "group":
+                w = group_weights(fr.iloc[i])
+            elif wkind == "balanced":
+                w = balanced_weights(fr.y.to_numpy()[i])
+            specs.append({"id": tid("ph", cohort, "T2", v, "r0", f"k{k}", m, "s0"), "model": m, "feats": fts, "hp": HP[(cohort, m)],
+                          "seed": fit_seed(cohort, "T2", 0, k, 0), "signs": sg, "lam": LAM[(cohort, "T2")] if m == "CKINN" else 0.0,
+                          "train_frame": cohort, "train_idx": i, "train_w": w, "tests": [{"tag": "none", "frame": cohort, "idx": j}],
+                          "_variant": v, "_model": m, "_k": k})
+    return specs
+
+
+def pool_indicator_specs(EVAL, FOLDS, pooled_feats: Sequence[str], HP, LAM, cfg, cap: int = 20000) -> List[dict]:
+    """M4 of the 28-step ablation: pooled NAGALA + RICH training with a cohort indicator. Same rows, cap and seeds as the v2 pooled
+    ablation, so the only difference is the indicator. Evaluated within the two training cohorts only (it has no value elsewhere)."""
+    off = {"NAGALA": 0, "RICH": len(EVAL["NAGALA"])}
+    feats = list(pooled_feats) + ["cohort_rich"]
+    specs = []
+    for k in range(cfg.n_splits):
+        tr, tests = [], []
+        for c in ("NAGALA", "RICH"):
+            i, j = FOLDS[c][0][k]
+            if len(i) > cap:
+                i = np.sort(train_test_split(i, train_size=cap, stratify=EVAL[c].y.to_numpy()[i], random_state=seed_for("poolcap", c, k))[0])
+            tr.append(i + off[c])
+            tests.append({"tag": c, "frame": "POOL_IND", "idx": j + off[c]})
+        for m in ("M2", "CKINN"):
+            specs.append({"id": tid("phpool", m, f"k{k}"), "model": m, "feats": feats, "hp": HP[("RICH", m)], "seed": seed_for("pool", k),
+                          "signs": signs_for("T2", feats), "lam": LAM[("RICH", "T2")] if m == "CKINN" else 0.0, "train_frame": "POOL_IND",
+                          "train_idx": np.concatenate(tr), "tests": tests, "_k": k, "_model": m})
+    return specs
+
+
+def transport_specs(EVAL, FOLDS, shared: Sequence[str], HP, cfg, models=TRANSPORT_EXTRA) -> List[dict]:
+    """Transport for the models the v2 transport analysis left out (seed 0), same seeds and rows as v2 (step 12 matrix)."""
+    specs = []
+    for src, tgt in (("NAGALA", "RICH"), ("RICH", "NAGALA")):
+        sg = signs_for("T2", shared)
+        for m in models:
+            hp_key = {"MI_LR": "LR"}.get(m, m)
+            specs.append({"id": tid("phtrext", src, tgt, m, "s0"), "model": m, "feats": list(shared), "hp": HP[(src, hp_key)], "signs": sg,
+                          "seed": seed_for("tr_ext", src, 0), "train_frame": src, "train_idx": np.arange(len(EVAL[src])),
+                          "tests": [{"tag": "tgt", "frame": tgt, "idx": np.arange(len(EVAL[tgt]))}], "_src": src, "_tgt": tgt, "_model": m})
+            for k, (i, j) in enumerate(FOLDS[tgt][0]):
+                specs.append({"id": tid("phtrref", tgt, m, f"k{k}", "s0"), "model": m, "feats": list(shared), "hp": HP[(tgt, hp_key)],
+                              "signs": sg, "seed": seed_for("tr_ref", tgt, k, 0), "train_frame": tgt, "train_idx": i,
+                              "tests": [{"tag": "none", "frame": tgt, "idx": j}], "_tgt": tgt, "_model": m, "_k": k, "_r": 0, "_s": 0})
+    return specs
+
+
+def progression_frame(ev_rich: pd.DataFrame) -> pd.DataFrame:
+    """Proposal section 3C, one step: among RICH evaluation participants with baseline FPG below 5.6 mmol/L, the outcome is FPG of at
+    least 5.6 mmol/L at the final visit or diabetes during follow-up. The transition time is not observed."""
+    rp = ev_rich[ev_rich.fpg_mmol < 5.6].copy()
+    rp["y"] = ((rp.fpg_final >= 5.6) | (rp.label == 1)).astype(int)
+    return rp.reset_index(drop=True)
+
+
+def progression_specs(folds, feats: Sequence[str], HP, LAM, cfg) -> List[dict]:
+    sg = signs_for("T2", feats)
+    return [{"id": tid("phprog", m, f"k{k}"), "model": m, "feats": list(feats), "hp": HP[("RICH", m)], "seed": seed_for("phprog", k),
+             "signs": sg, "lam": LAM[("RICH", "T2")] if m == "CKINN" else 0.0, "train_frame": "RICH_prog", "train_idx": i,
+             "tests": [{"tag": "none", "frame": "RICH_prog", "idx": j}], "_k": k, "_model": m, "_r": 0, "_s": 0}
+            for k, (i, j) in enumerate(folds[0]) for m in PROGRESSION_MODELS]
+
+
+# ------------------------------------------------------------------ audit table (step 5)
+UNAVAILABLE = [("ethnicity / ancestry", "NHANES only (descriptive fairness groups); absent in NAGALA and RICH"),
+               ("previous prediabetes", "NHANES only (DIQ160, cycles 2005-06 onwards); post hoc exploratory input"),
+               ("cardiovascular disease", "not in any of the three files used"),
+               ("hypertension diagnosis", "NHANES only (BPQ020); post hoc exploratory input"),
+               ("glucose-lowering medication", "NHANES only; used to define the exclusions of the detection label, not as an input"),
+               ("diet", "not in any of the three files"), ("sleep", "not in any of the three files"),
+               ("earlier glucose readings", "not in any of the three files"),
+               ("weight and height", "NAGALA weight and RICH height and weight exist; BMI is used instead (derived from them)"),
+               ("socio-economic status", "not in any of the three files")]
+
+
+def audit_table(TASK: Dict[str, pd.DataFrame], FEATS: Dict[tuple, list], features: Sequence[str]) -> pd.DataFrame:
+    rows = []
+    for f in features:
+        r = {"predictor": f}
+        for c in ("NAGALA", "RICH", "NHANES"):
+            r[f"missing_pct_{c}"] = 100 * float(TASK[c][f].isna().mean()) if f in TASK[c] else 100.0
+            r[f"used_{c}"] = ("T2" if f in FEATS.get((c, "T2"), []) else "") + (" T3" if f in FEATS.get((c, "T3"), []) and f not in FEATS.get((c, "T2"), []) else "")
+        r["available_at_prediction_time"] = "yes (baseline measurement or questionnaire)"
+        r["leakage_risk"] = ("high: defines the detection label, banned for NHANES; incident task only in T3" if f in ("fpg_mmol", "hba1c_pct")
+                             else "moderate: implies an earlier glucose test; exploratory only" if f == "prediabetes_told" else "low")
+        r["fairness_relevance"] = "group variable for subgroup analysis (also a predictor)" if f in ("sex_female", "age_years") else "none"
+        r["prior_sign"] = {1: "+", -1: "-"}.get(signs_for("T3", [f]).get(f), "unconstrained")
+        rows.append(r)
+    return pd.DataFrame(rows)
+########## CELL 14 | end ##########
+
+########## CELL 15 | CODE | start ##########
 %%writefile ckv2_lib/tests/test_ckv2.py
 """Unit tests for the v2 library. Toy arrays only (CLAUDE.md); no cohort data are read here.
 Run: python -m pytest -q realdata_v2/tests  (the notebook runs the same checks in its test cells)."""
@@ -2376,7 +2775,7 @@ def test_monotone_baselines_are_monotone(name):
         assert _is_monotone(m, d, f, SIGNS_T2[f]), (name, f)
 
 
-@pytest.mark.parametrize("name", ["LR", "GAM", "RF", "XGB", "LGBM", "MI_LR", "LR_aug", "XGB_aug", "M1", "M2"])
+@pytest.mark.parametrize("name", ["LR", "GAM", "RF", "XGB", "LGBM", "MI_LR", "LR_aug", "XGB_aug", "M1", "M2", "SVM"])
 def test_every_model_returns_valid_probabilities(name):
     d = toy_frame()
     feats = ["age_years", "sex_female", "bmi_kgm2", "sbp_mmHg", "tg_mmol", "hdl_mmol"]
@@ -2476,9 +2875,75 @@ def test_survey_replicate_weights():
     for s in (1, 2):
         for p in (1, 2):
             assert len(set(r0[(st == s) & (psu == p)])) == 1
-########## CELL 14 | end ##########
 
-########## CELL 15 | CODE | start ##########
+
+# ------------------------------------------------------------------ post hoc additions (PH)
+def _linear_predict(beta, feats):
+    def predict(df):
+        z = sum(b * np.nan_to_num(df[f].to_numpy(float)) for b, f in zip(beta, feats))
+        return 1 / (1 + np.exp(-z))
+    return predict
+
+
+def test_permutation_shap_is_exact_for_a_linear_logit_and_additive():
+    from ckv2.posthoc import permutation_shap
+    rng = np.random.default_rng(0)
+    feats = ["a", "b", "c"]
+    beta = [0.8, -0.5, 0.0]
+    rows = pd.DataFrame(rng.normal(size=(5, 3)), columns=feats)
+    bg = pd.DataFrame(rng.normal(size=(40, 3)), columns=feats)
+    phi, base, fx = permutation_shap(_linear_predict(beta, feats), rows, bg, feats, 4, np.random.default_rng(1))
+    expected = (rows.to_numpy() - bg.to_numpy().mean(0)) * np.array(beta)
+    assert np.allclose(phi, expected, atol=1e-8)
+    assert np.allclose(phi.sum(1), fx - base, atol=1e-8)
+
+
+def test_perturbation_violations_monotone_and_anti_monotone():
+    from ckv2.posthoc import perturbation_violations
+    rng = np.random.default_rng(2)
+    df = pd.DataFrame({"bmi_kgm2": rng.normal(25, 3, 300), "hdl_mmol": rng.normal(1.3, 0.3, 300), "exercise_regular": rng.integers(0, 2, 300).astype(float)})
+    df.loc[:9, "bmi_kgm2"] = np.nan
+    signs = {"bmi_kgm2": 1, "hdl_mmol": -1, "exercise_regular": -1}
+    good = perturbation_violations(_linear_predict([0.2, -1.0, -0.5], list(df)), df, df, signs, list(df), 0.25, 1e-6)
+    bad = perturbation_violations(_linear_predict([-0.2, 1.0, 0.5], list(df)), df, df, signs, list(df), 0.25, 1e-6)
+    assert all(v["viol"] == 0 for v in good.values())
+    assert bad["bmi_kgm2"]["viol"] == bad["bmi_kgm2"]["n"] == 290
+    assert bad["exercise_regular"]["n"] == int((df.exercise_regular == 0).sum()) == bad["exercise_regular"]["viol"]
+
+
+def test_reasoning_text_wording_and_flags():
+    from ckv2.posthoc import reasoning_inputs, reasoning_text
+    rng = np.random.default_rng(3)
+    df = pd.DataFrame({"bmi_kgm2": rng.normal(25, 3, 50), "tg_mmol": np.exp(rng.normal(0.2, 0.4, 50)), "hdl_mmol": rng.normal(1.3, 0.3, 50)})
+    feats = list(df)
+    for beta, consistent in (([0.2, 0.8, -1.0], True), ([0.2, -0.8, -1.0], False)):
+        pred = _linear_predict(beta, feats)
+        rec = reasoning_inputs(pred, df.iloc[:5], df, {"bmi_kgm2": 1, "tg_mmol": 1, "hdl_mmol": -1}, feats, 0.25, 1e-6, ["tg_mmol", "hdl_mmol"])
+        rec["phi"] = np.tile(np.array(beta), (5, 1))
+        txt = reasoning_text(rec, 0, "B")
+        low = txt.lower()
+        for word in ("should", "lose", "prevent", "you will", "advise"):
+            assert word not in low, word
+        assert ("agrees with every clinical prior" in txt) == consistent
+        assert "not a diagnosis" in txt
+
+
+def test_weights_and_wilson_and_progression_label():
+    from ckv2.posthoc import balanced_weights, group_weights, progression_frame, wilson
+    y = np.r_[np.ones(10), np.zeros(90)]
+    w = balanced_weights(y)
+    assert abs(w.mean() - 1) < 1e-12 and abs(w[y == 1].sum() - w[y == 0].sum()) < 1e-9
+    fr = pd.DataFrame({"sex": ["f"] * 30 + ["m"] * 70, "age_band": ["20-39"] * 50 + ["60+"] * 50})
+    g = group_weights(fr)
+    assert abs(g.mean() - 1) < 1e-12
+    lo, hi = wilson(30, 100)
+    assert lo < 0.3 < hi
+    ev = pd.DataFrame({"fpg_mmol": [5.0, 5.5, 5.7, 5.2], "fpg_final": [5.7, 5.0, 7.5, 5.0], "label": [0.0, 1.0, 1.0, 0.0]})
+    pf = progression_frame(ev)
+    assert len(pf) == 3 and pf.y.tolist() == [1, 1, 0]
+########## CELL 15 | end ##########
+
+########## CELL 16 | CODE | start ##########
 # CELL 15 | unit tests of the library (toy arrays only): metrics against scikit-learn, lifelines and scikit-survival where installed,
 # monotone baselines, repeated folds, penalty, CKINN(lambda = 0) = M2
 import importlib
@@ -2488,12 +2953,12 @@ for _m in [m for m in list(sys.modules) if m == "ckv2" or m.startswith("ckv2.")]
 _t0 = time.perf_counter()
 _rc = pytest.main(["-q", "-p", "no:cacheprovider", "-W", "ignore", str(LIB / "tests" / "test_ckv2.py")])
 assert _rc == 0, "unit tests failed"
-from ckv2 import config as C, data as D, metrics as MT, engine as EN, plan as PL, analysis as AN
+from ckv2 import config as C, data as D, metrics as MT, engine as EN, plan as PL, analysis as AN, posthoc as PH
 from ckv2.missing import scen_tag, scenarios
 print(f"CELL 15 OK | unit tests passed | {time.perf_counter() - _t0:.0f}s")
-########## CELL 15 | end ##########
+########## CELL 16 | end ##########
 
-########## CELL 16 | CODE | start ##########
+########## CELL 17 | CODE | start ##########
 # CELL 16 | frozen configuration and protocol hash (protocol section 9); full mode stops if the configuration differs
 CFG = C.make_config(MODE)
 PROTOCOL_HASH = C.config_hash(CFG)
@@ -2503,9 +2968,9 @@ print("configuration sha256:", PROTOCOL_HASH)
 if MODE == "full":
     assert PROTOCOL_HASH == EXPECTED_FULL_HASH, "the full-mode configuration differs from the frozen protocol: record a deviation first"
 print("CELL 16 OK | configuration frozen")
-########## CELL 16 | end ##########
+########## CELL 17 | end ##########
 
-########## CELL 17 | CODE | start ##########
+########## CELL 18 | CODE | start ##########
 # CELL 17 | data: locate and hash the three files, harmonise, audit, task frames, development / evaluation split, feature sets
 _t0 = time.perf_counter()
 _roots = [DATA_DIR, Path("."), Path("/content"), Path("/mnt/user-data/uploads")]
@@ -2579,9 +3044,9 @@ with pd.option_context("display.width", 200, "display.max_columns", 30):
     print(DATA_CARD.round(3).to_string(index=False)); print(NH_LABEL.to_string(index=False)); print(SPLIT.to_string(index=False))
     print(FEAT_TBL.to_string(index=False))
 print(f"CELL 17 OK | data loaded, audited and split | {time.perf_counter() - _t0:.0f}s")
-########## CELL 17 | end ##########
+########## CELL 18 | end ##########
 
-########## CELL 18 | CODE | start ##########
+########## CELL 19 | CODE | start ##########
 # CELL 18 | tuning on development rows only (protocol section 5): 32 configurations for M1 and M2; CKINN = M2's best of its first 24
 # plus 8 lambda values scored with lambda 0 on repeated 3-fold CV; competitors on their own grids
 _t0 = time.perf_counter()
@@ -2617,9 +3082,9 @@ HP_SHARED = {c: HP[(c, "CKINN")] == HP[(c, "M2")] for c in ("NAGALA", "RICH", "N
 pd.DataFrame([{"cohort": c, "ckinn_uses_m2_configuration": v} for c, v in HP_SHARED.items()]).to_csv(OUT / "tables" / "table07b_ckinn_m2_configuration.csv", index=False)
 print("CKINN uses the same network configuration as M2 (so family A isolates the penalty):", HP_SHARED)
 print(f"CELL 18 OK | tuning done on development rows only | {time.perf_counter() - _t0:.0f}s")
-########## CELL 18 | end ##########
+########## CELL 19 | end ##########
 
-########## CELL 19 | CODE | start ##########
+########## CELL 20 | CODE | start ##########
 # CELL 19 | main runs: 5 repeats x 5 folds, every model, network seed r in repeat r; test-time missingness scenarios;
 # repeat 0 also stores attributions, violation statistics, sparse-region probes and partial dependence
 _t0 = time.perf_counter()
@@ -2627,9 +3092,9 @@ CV_SPECS = {c: PL.cv_specs(c, "T2", FOLDS[c], FEATS[(c, "T2")], HP, LAM, CFG) fo
 SEED_SPECS = {c: PL.seed_specs(c, "T2", FOLDS[c], FEATS[(c, "T2")], HP, LAM, CFG) for c in ("NAGALA", "RICH", "NHANES")}
 EN.run_tasks([s for c in CV_SPECS for s in CV_SPECS[c] + SEED_SPECS[c]], CFG, CACHE, N_WORKERS, "main runs and seed study")
 print(f"CELL 19 OK | main runs and seed study fitted | {time.perf_counter() - _t0:.0f}s")
-########## CELL 19 | end ##########
+########## CELL 20 | end ##########
 
-########## CELL 20 | CODE | start ##########
+########## CELL 21 | CODE | start ##########
 # CELL 20 | repeat 0 analyses: constraint variants (leave one out, wrong signs, alternative tables, lambda path), tier T3,
 # RICH without family history, NHANES with the v1 label, 3-year IPCW models
 _t0 = time.perf_counter()
@@ -2647,9 +3112,9 @@ _all = [s for v in VAR_SPECS.values() for s in v] + [s for v in T3_SPECS.values(
        [s for v in IPCW_SPECS.values() for s in v]
 EN.run_tasks(_all, CFG, CACHE, N_WORKERS, "repeat-0 analyses")
 print(f"CELL 20 OK | repeat-0 analyses fitted | {time.perf_counter() - _t0:.0f}s")
-########## CELL 20 | end ##########
+########## CELL 21 | end ##########
 
-########## CELL 21 | CODE | start ##########
+########## CELL 22 | CODE | start ##########
 # CELL 21 | transport (H3), reweighting, pooled training and RICH leave-one-site-out
 _t0 = time.perf_counter()
 TR_SPECS = PL.transport_specs(EVAL, FOLDS, SHARED, HP, LAM, CFG)
@@ -2658,14 +3123,14 @@ SITE_SPECS, SITES_HELD = PL.site_specs(EVAL["RICH"], FEATS[("RICH", "T2")], HP, 
 EN.run_tasks(TR_SPECS + POOL_SPECS + SITE_SPECS, CFG, CACHE, N_WORKERS, "transport, pooled, sites")
 print(f"held-out RICH sites: {SITES_HELD}")
 print(f"CELL 21 OK | transport, pooled and site analyses fitted | {time.perf_counter() - _t0:.0f}s")
-########## CELL 21 | end ##########
-
-########## CELL 22 | MARKDOWN | start ##########
-## Analysis of the stored predictions
-Everything below reads the checkpointed predictions; no model is fitted. Each table states its label (P1, P2, E).
 ########## CELL 22 | end ##########
 
-########## CELL 23 | CODE | start ##########
+########## CELL 23 | MARKDOWN | start ##########
+## Analysis of the stored predictions
+Everything below reads the checkpointed predictions; no model is fitted. Each table states its label (P1, P2, E).
+########## CELL 23 | end ##########
+
+########## CELL 24 | CODE | start ##########
 # CELL 23 | assemble out-of-fold predictions of every stage and save them locally (row-level: never archived)
 _t0 = time.perf_counter()
 COHORTS = ("NAGALA", "RICH", "NHANES")
@@ -2710,9 +3175,9 @@ for c in COHORTS:
 np.savez_compressed(CACHE / "preds" / "transport.npz", **{f"ext|{a}|{b}|{m}|s{s}": v for (a, b, m, s), v in TRX.items()},
                     **{f"ref|{a}|{m}|s{s}": v for (a, m, s), v in TRREF.items()}, y_NAGALA=Y["NAGALA"], y_RICH=Y["RICH"])
 print(f"CELL 23 OK | predictions assembled for {sum(len(P[c]) for c in COHORTS)} cohort-model-run keys | {time.perf_counter() - _t0:.0f}s")
-########## CELL 23 | end ##########
+########## CELL 24 | end ##########
 
-########## CELL 24 | CODE | start ##########
+########## CELL 25 | CODE | start ##########
 # CELL 24 | performance of every model (P2): run-averaged AUROC, AUPRC, Brier, scaled Brier, calibration slope,
 # calibration-in-the-large and ECE, with 95% intervals from the paired bootstrap (descriptive draws)
 _t0 = time.perf_counter()
@@ -2741,9 +3206,9 @@ PERF.to_csv(OUT / "tables" / "table08_performance.csv", index=False)
 with pd.option_context("display.width", 250, "display.max_columns", 30):
     print(PERF[["cohort", "model", "runs", "events", "auroc", "auroc_lo", "auroc_hi", "auprc", "brier", "scaled_brier", "slope", "citl", "ece"]].round(4).to_string(index=False))
 print(f"CELL 24 OK | performance table | {time.perf_counter() - _t0:.0f}s")
-########## CELL 24 | end ##########
+########## CELL 25 | end ##########
 
-########## CELL 25 | CODE | start ##########
+########## CELL 26 | CODE | start ##########
 # CELL 25 | hypothesis families A (CKINN minus M2, primary) and B (CKINN minus M1): H1 to H5 with Holm correction (P2)
 _t0 = time.perf_counter()
 GROUPS, N_BANDS = {}, {}
@@ -2805,9 +3270,9 @@ with pd.option_context("display.width", 250, "display.max_columns", 30, "display
     print(VERDICTS.to_string(index=False))
 assert EP[EP.primary].groupby("family").size().nunique() == 1, "families must have the same endpoints"
 print(f"CELL 25 OK | verdicts: " + "; ".join(f"{r.family[:1]} {r.hypothesis} {r.verdict}" for r in VERDICTS.itertuples()) + f" | {time.perf_counter() - _t0:.0f}s")
-########## CELL 25 | end ##########
+########## CELL 26 | end ##########
 
-########## CELL 26 | CODE | start ##########
+########## CELL 27 | CODE | start ##########
 from scipy.stats import norm
 # CELL 26 | cross-checks of H1 (P2): DeLong on run 0, corrected repeated-CV t-test over 25 folds, TOST equivalence, RICH cluster
 # bootstrap by site, minimum detectable effect for NAGALA; variance components (sampling, seed, split)
@@ -2866,9 +3331,9 @@ VARCOMP.to_csv(OUT / "tables" / "table12_variance_components.csv", index=False)
 with pd.option_context("display.width", 250, "display.max_columns", 30):
     print(XCHECK.round(5).to_string(index=False)); print(VARCOMP.round(5).to_string(index=False))
 print(f"CELL 26 OK | cross-checks and variance components | {time.perf_counter() - _t0:.0f}s")
-########## CELL 26 | end ##########
+########## CELL 27 | end ##########
 
-########## CELL 27 | CODE | start ##########
+########## CELL 28 | CODE | start ##########
 # CELL 27 | CKINN against every competitor (P2, descriptive, no multiplicity correction): AUROC and Brier differences
 _t0 = time.perf_counter()
 rows = []
@@ -2886,9 +3351,9 @@ SEC = pd.DataFrame(rows)
 SEC.to_csv(OUT / "tables" / "table13_ckinn_vs_competitors.csv", index=False)
 print(SEC[SEC.metric == "auroc"].round(4).to_string(index=False))
 print(f"CELL 27 OK | competitor comparisons | {time.perf_counter() - _t0:.0f}s")
-########## CELL 27 | end ##########
+########## CELL 28 | end ##########
 
-########## CELL 28 | CODE | start ##########
+########## CELL 29 | CODE | start ##########
 # CELL 28 | calibration (P2): reliability curves with 95% bootstrap bands (run 0, seed 0; equal-frequency tenths) for M1, M2, CKINN,
 # LR and monotone XGBoost; slope, calibration-in-the-large and ECE intervals are in table 8
 _t0 = time.perf_counter()
@@ -2912,9 +3377,9 @@ for c in COHORTS:
 CALCURVE = pd.DataFrame(rows)
 CALCURVE.to_csv(OUT / "tables" / "table14_reliability_curves.csv", index=False)
 print(f"CELL 28 OK | reliability curves | {time.perf_counter() - _t0:.0f}s")
-########## CELL 28 | end ##########
+########## CELL 29 | end ##########
 
-########## CELL 29 | CODE | start ##########
+########## CELL 30 | CODE | start ##########
 # CELL 29 | clinical utility (P2): decision curves (net benefit, run-averaged) with intervals at the stated thresholds, and threshold
 # metrics at fixed sensitivity 0.80 and fixed specificity 0.90 (thresholds from the inner validation split of each training fold)
 _t0 = time.perf_counter()
@@ -2953,9 +3418,9 @@ NBPTS.to_csv(OUT / "tables" / "table16_net_benefit_points.csv", index=False)
 THRMET.to_csv(OUT / "tables" / "table17_threshold_metrics.csv", index=False)
 print(NBPTS.round(5).to_string(index=False)); print(THRMET.round(3).to_string(index=False))
 print(f"CELL 29 OK | decision curves and threshold metrics | {time.perf_counter() - _t0:.0f}s")
-########## CELL 29 | end ##########
+########## CELL 30 | end ##########
 
-########## CELL 30 | CODE | start ##########
+########## CELL 31 | CODE | start ##########
 # CELL 30 | censoring-aware evaluation in NAGALA and RICH (P2): Harrell's C, Uno's C at 3 years, IPCW cumulative/dynamic AUROC at
 # 3 years (NAGALA also 5 years); and the 3-year IPCW-trained models (E): IPCW Brier, scaled Brier, observed and predicted 3-year risk
 _t0 = time.perf_counter()
@@ -2998,9 +3463,9 @@ TTE.to_csv(OUT / "tables" / "table18_censoring_aware.csv", index=False)
 IPCWM.to_csv(OUT / "tables" / "table19_ipcw_3y_models.csv", index=False)
 print(TTE.round(4).to_string(index=False)); print(IPCWM.round(4).to_string(index=False))
 print(f"CELL 30 OK | censoring-aware metrics | {time.perf_counter() - _t0:.0f}s")
-########## CELL 30 | end ##########
+########## CELL 31 | end ##########
 
-########## CELL 31 | CODE | start ##########
+########## CELL 32 | CODE | start ##########
 # CELL 31 | fairness (E, with H5 in cell 25): by sex and age band (and RICH site, NHANES ethnic group, descriptive): AUROC,
 # sensitivity at FPR 0.10, true- and false-positive rates at the common threshold, calibration-in-the-large; gap intervals
 _t0 = time.perf_counter()
@@ -3051,9 +3516,9 @@ FAIR.to_csv(OUT / "tables" / "table20_subgroups.csv", index=False)
 FAIRGAP.to_csv(OUT / "tables" / "table21_subgroup_gaps.csv", index=False)
 print(FAIRGAP[FAIRGAP.model.isin(["M2", "CKINN"])].round(4).to_string(index=False))
 print(f"CELL 31 OK | subgroup tables | {time.perf_counter() - _t0:.0f}s")
-########## CELL 31 | end ##########
+########## CELL 32 | end ##########
 
-########## CELL 32 | CODE | start ##########
+########## CELL 33 | CODE | start ##########
 # CELL 32 | missingness (P2): test-time removal of the laboratory panel (MCAR, MAR, MNAR at 10, 30, 50%), AUROC loss at MCAR 30% for
 # CKINN against each comparator; RICH structural missingness patterns; RICH leave-one-site-out
 _t0 = time.perf_counter()
@@ -3120,9 +3585,9 @@ for name, df in (("table22_missingness_auroc", MISS_AUC), ("table23_missingness_
     df.to_csv(OUT / "tables" / f"{name}.csv", index=False)
 print(MISS_TEST.round(4).to_string(index=False)); print(SITE_POOL.round(4).to_string(index=False))
 print(f"CELL 32 OK | missingness and site tables | {time.perf_counter() - _t0:.0f}s")
-########## CELL 32 | end ##########
+########## CELL 33 | end ##########
 
-########## CELL 33 | CODE | start ##########
+########## CELL 34 | CODE | start ##########
 # CELL 33 | constraint evidence (E; manipulation check P1): in-distribution violation rates of M1, M2, CKINN by seed; leave-one-out,
 # wrong-sign, alternative tables and lambda path; empirical signs against held-out partial dependence; sparse regions; other cohort
 _t0 = time.perf_counter()
@@ -3205,9 +3670,9 @@ for name, df in (("table27_manipulation_check", MANIP), ("table28_constraint_var
     df.to_csv(OUT / "tables" / f"{name}.csv", index=False)
 print(MANIP.round(4).to_string(index=False)); print(VARIANTS.round(4).to_string(index=False)); print(SPARSE.round(4).to_string(index=False))
 print(f"CELL 33 OK | constraint evidence tables | {time.perf_counter() - _t0:.0f}s")
-########## CELL 33 | end ##########
+########## CELL 34 | end ##########
 
-########## CELL 34 | CODE | start ##########
+########## CELL 35 | CODE | start ##########
 # CELL 34 | transport detail (P2) and secondary transport analyses (E): seed-averaged internal reference and external metrics;
 # recalibration in the small with 1,000 target participants (target labels used); label-free reweighting; pooled training
 _t0 = time.perf_counter()
@@ -3261,9 +3726,9 @@ for name, df in (("table31_transport", TRANS), ("table32_transport_recalibration
     df.to_csv(OUT / "tables" / f"{name}.csv", index=False)
 print(TRANS.round(4).to_string(index=False)); print(TRANS2.round(4).to_string(index=False)); print(POOLTBL.round(4).to_string(index=False))
 print(f"CELL 34 OK | transport tables | {time.perf_counter() - _t0:.0f}s")
-########## CELL 34 | end ##########
+########## CELL 35 | end ##########
 
-########## CELL 35 | CODE | start ##########
+########## CELL 36 | CODE | start ##########
 # CELL 35 | sensitivity analyses (E): tier T3, RICH without family history, NHANES with the v1 label, NHANES survey-weighted metrics
 _t0 = time.perf_counter()
 rows, _pl = [], {}
@@ -3294,9 +3759,397 @@ SENS = pd.DataFrame(rows)
 SENS.to_csv(OUT / "tables" / "table34_sensitivity.csv", index=False)
 print(SENS.round(4).to_string(index=False))
 print(f"CELL 35 OK | sensitivity analyses | {time.perf_counter() - _t0:.0f}s")
-########## CELL 35 | end ##########
+########## CELL 36 | end ##########
 
-########## CELL 36 | CODE | start ##########
+########## CELL 37 | MARKDOWN | start ##########
+## Post hoc additions for the 28-step protocol (label PH)
+These cells close the steps of the 28-step protocol that the v2 analysis covered only partly or not at all, where the data allow it (`COVERAGE_28_STEPS.md`). They were decided **after** the v2 results had been seen, so every table they produce is labelled post hoc (PH) and none enters a hypothesis family or changes a v2 verdict. The frozen configuration and its hash are unchanged. The list, with reasons, is in `protocol_v2.md`, section 10.
+
+Where a post hoc fit repeats a main-run fit (same seed, rows and configuration), its unmodified predictions must equal the stored ones; the reproducibility table reports the largest difference.
+########## CELL 37 | end ##########
+
+########## CELL 38 | CODE | start ##########
+# CELL PH1 | post hoc fits: SVM tuning and main runs (step 19); repeat-0 refits of every model with BMI 24/35 pairs and perturbation
+# violations (step 2), SHAP (step 14) and reasoning inputs (steps 15, 27); variants (steps 6, 8, 20, 21, section 5); pooled training
+# with a cohort indicator (step 20); transport for the remaining models (step 12); RICH one-step progression (proposal section 3C)
+_t0 = time.perf_counter()
+PHS = PH.settings(CFG)
+_sv = {c: PH.svm_tune_specs(c, DEV[c], FEATS[(c, "T2")], CFG) for c in COHORTS}
+EN.run_tasks([s for v in _sv.values() for s in v], CFG, CACHE, N_WORKERS, "PH: SVM tuning")
+_rows = []
+for c, sp in _sv.items():
+    sc = PL.score_specs(sp, DEV[c], CACHE).groupby("ci").score.mean()
+    grid = [s_["hp"] for s_ in sp if s_["id"].endswith("__k0")]
+    HP[(c, "SVM")] = grid[int(sc.idxmin())]
+    _rows += [{"cohort": c, "model": "SVM", "config": int(ci), "dev_score": v, "chosen": int(ci) == int(sc.idxmin()), "hp": json.dumps(grid[int(ci)])}
+              for ci, v in sc.items()]
+PH_TUNING = pd.DataFrame(_rows)
+SVM_SPECS = {c: PL.cv_specs(c, "T2", FOLDS[c], FEATS[(c, "T2")], HP, LAM, CFG, models=("SVM",), variant="ph", extras=False) for c in COHORTS}
+REFIT_SPECS = {c: PH.refit_specs(c, FOLDS[c], FEATS[(c, "T2")], HP, LAM, CFG) for c in COHORTS}
+PHVAR_SPECS = {c: PH.variant_specs(c, FOLDS[c], FEATS[(c, "T2")], HP, LAM, CFG, EVAL[c]) for c in COHORTS}
+FR["POOL_IND"] = FR["POOL"].assign(cohort_rich=(FR["POOL"].cohort == "RICH").astype(float))
+FR["RICH_prog"] = PH.progression_frame(EVAL["RICH"])
+EN.save_frames(CACHE, {"POOL_IND": FR["POOL_IND"], "RICH_prog": FR["RICH_prog"]})
+PROG_FOLDS = D.repeated_folds(FR["RICH_prog"].y.to_numpy(), "RICH_prog", CFG.n_splits, 1)
+PHPOOL_SPECS = PH.pool_indicator_specs(EVAL, FOLDS, POOLED_FEATS, HP, LAM, CFG)
+PHTR_SPECS = PH.transport_specs(EVAL, FOLDS, SHARED, HP, CFG)
+PROG_SPECS = PH.progression_specs(PROG_FOLDS, FEATS[("RICH", "T2")], HP, LAM, CFG)
+PH_ALL_SPECS = ([s for v in _sv.values() for s in v] + [s for v in SVM_SPECS.values() for s in v] + [s for v in REFIT_SPECS.values() for s in v]
+                + [s for v in PHVAR_SPECS.values() for s in v] + PHPOOL_SPECS + PHTR_SPECS + PROG_SPECS)
+EN.run_tasks(PH_ALL_SPECS[len([s for v in _sv.values() for s in v]):], CFG, CACHE, N_WORKERS, "PH: fits")
+PH_TUNING.to_csv(OUT / "tables" / "tablePH01_svm_tuning.csv", index=False)
+print(PH_TUNING.round(5).to_string(index=False))
+print(f"progression frame (RICH, baseline FPG < 5.6): {len(FR['RICH_prog']):,} rows, {int(FR['RICH_prog'].y.sum()):,} with progression")
+print(f"CELL PH1 OK | post hoc fits done | {time.perf_counter() - _t0:.0f}s")
+########## CELL 38 | end ##########
+
+########## CELL 39 | CODE | start ##########
+# CELL PH2 | refit reproducibility; SVM performance (step 19); model-agnostic violation rates for every model and the BMI 24-to-35
+# pair test (step 2); class-weighted versus unweighted (step 8); post hoc variants (steps 6, 20, 21, section 5); pooled training with
+# a cohort indicator (step 20, M4)
+_t0 = time.perf_counter()
+SVMP = {c: AN.collect(SVM_SPECS[c], NE[c], CACHE)[0] for c in COHORTS}
+SVMTHR = {c: AN.collect(SVM_SPECS[c], NE[c], CACHE)[1] for c in COHORTS}
+rows_rep, viol_acc, pair_acc = [], {}, {}
+for c in COHORTS:
+    for s_ in REFIT_SPECS[c]:
+        r_ = EN.load(CACHE, s_["id"])
+        m, j = s_["_model"], s_["tests"][0]["idx"]
+        ref = (SVMP[c][("SVM", 0, 0)]["none"] if m == "SVM" else P[c][(m, 0, 0)]["none"])[j].astype(float)
+        rows_rep.append({"cohort": c, "model": m, "fold": s_["_k"], "max_abs_diff_vs_main_fit": float(np.max(np.abs(r_["preds"]["none"].astype(float) - ref)))})
+        for f, v in r_["perturb"].items():
+            a = viol_acc.setdefault((c, m, f), [0, 0, []])
+            a[0] += v["n"]
+            a[1] += v["viol"]
+            if np.isfinite(v["mean_change"]):
+                a[2].append(v["mean_change"])
+        if "bmi24" in r_["preds"]:
+            d = r_["preds"]["bmi35"].astype(float) - r_["preds"]["bmi24"].astype(float)
+            a = pair_acc.setdefault((c, m), [0, 0, 0])
+            a[0], a[1], a[2] = a[0] + len(d), a[1] + int((d < 0).sum()), a[2] + int((d == 0).sum())
+REPRO = pd.DataFrame(rows_rep).groupby(["cohort", "model"]).max_abs_diff_vs_main_fit.max().reset_index()
+rows = []
+for (c, m, f), (n, k, mc) in viol_acc.items():
+    lo, hi = PH.wilson(k, n)
+    rows.append({"cohort": c, "model": m, "predictor": f, "n": n, "violations": k, "violation_rate": k / n if n else np.nan, "lo": lo, "hi": hi,
+                 "mean_signed_logit_change": float(np.mean(mc)) if mc else np.nan})
+VIOL_FEAT = pd.DataFrame(rows)
+VIOL_ALL = VIOL_FEAT.groupby(["cohort", "model"]).agg(n=("n", "sum"), violations=("violations", "sum")).reset_index()
+VIOL_ALL["violation_rate"] = VIOL_ALL.violations / VIOL_ALL.n
+VIOL_ALL[["lo", "hi"]] = [PH.wilson(int(k), int(n)) for k, n in zip(VIOL_ALL.violations, VIOL_ALL.n)]
+rows = []
+for (c, m), (n, k, eq) in pair_acc.items():
+    lo, hi = PH.wilson(k, n)
+    rows.append({"cohort": c, "model": m, "pairs": n, "risk_lower_at_bmi35": k, "share_lower": k / n, "lo": lo, "hi": hi, "share_unchanged": eq / n})
+BMIPAIRS = pd.DataFrame(rows)
+# SVM performance and CKINN minus SVM (run-averaged, same bootstrap convention as table 8)
+_pl = {c: {"y": Y[c], "vecs": {"SVM": [SVMP[c][("SVM", r, s)]["none"] for r, s in MAINRUNS], "CKINN": [P[c][("CKINN", r, s)]["none"] for r, s in MAINRUNS]},
+           "stats": ["auroc", "brier", "slope", "citl"]} for c in COHORTS}
+_b = AN.bootstrap(_pl, CFG.n_boot_desc, N_WORKERS)
+rows = []
+for c in COHORTS:
+    pt, dr = _b[c]["point"], _b[c]["draws"]
+    loss = float(np.mean([MT.auroc_w(MT.Ranked(SVMP[c][("SVM", r, s)]["none"], Y[c])) - MT.auroc_w(MT.Ranked(SVMP[c][("SVM", r, s)][PRIM], Y[c]))
+                          for r, s in MAINRUNS]))
+    rows.append({"cohort": c, "model": "SVM", "auroc": pt[("SVM", "auroc")], "auroc_lo": AN.ci(dr[("SVM", "auroc")])[0], "auroc_hi": AN.ci(dr[("SVM", "auroc")])[1],
+                 "auprc": float(np.mean([AN.auprc(Y[c], SVMP[c][("SVM", r, s)]["none"]) for r, s in MAINRUNS])), "brier": pt[("SVM", "brier")],
+                 "slope": pt[("SVM", "slope")], "citl": pt[("SVM", "citl")], "ckinn_minus_svm_auroc": pt[("CKINN", "auroc")] - pt[("SVM", "auroc")],
+                 "diff_lo": AN.ci(dr[("CKINN", "auroc")] - dr[("SVM", "auroc")])[0], "diff_hi": AN.ci(dr[("CKINN", "auroc")] - dr[("SVM", "auroc")])[1],
+                 f"auroc_loss_{PRIM}": loss})
+SVMPERF = pd.DataFrame(rows)
+# class weights and variants (repeat 0, seed index 0): each against the same model fitted without the change
+VARP = {}
+for c in COHORTS:
+    for s_ in PHVAR_SPECS[c]:
+        VARP.setdefault((c, s_["_variant"], s_["_model"]), np.full(NE[c], np.nan))[s_["tests"][0]["idx"]] = EN.load(CACHE, s_["id"])["preds"]["none"]
+_pl = {}
+for (c, v, m), p in VARP.items():
+    assert np.isfinite(p).all()
+    _pl[f"{c}|{v}|{m}"] = {"y": Y[c], "vecs": {"reference": [P[c][(m, 0, 0)]["none"]], "variant": [p]}, "groups": GROUPS[c], "fpr": CFG.fpr_matched,
+                           "stats": ["auroc", "brier", "slope", "citl", "tpr_sex_gap", "tpr_age_range"]}
+_b = AN.bootstrap(_pl, CFG.n_boot_desc, N_WORKERS)
+rows = []
+for key, b in _b.items():
+    c, v, m = key.split("|")
+    row = {"cohort": c, "variant": v, "model": m}
+    for st in ("auroc", "brier", "slope", "citl", "tpr_sex_gap", "tpr_age_range"):
+        row[f"{st}_reference"], row[f"{st}_variant"] = b["point"][("reference", st)], b["point"][("variant", st)]
+        row[f"{st}_diff"] = b["point"][("variant", st)] - b["point"][("reference", st)]
+        row[f"{st}_diff_lo"], row[f"{st}_diff_hi"] = AN.ci(b["draws"][("variant", st)] - b["draws"][("reference", st)])
+    rows.append(row)
+PHVAR = pd.DataFrame(rows)
+# pooled training with a cohort indicator (M4) against the same pooled training without it and against single-cohort training
+PPI = {}
+for s_ in PHPOOL_SPECS:
+    r_ = EN.load(CACHE, s_["id"])
+    for t in s_["tests"]:
+        off = 0 if t["tag"] == "NAGALA" else NE["NAGALA"]
+        PPI.setdefault((s_["_model"], t["tag"]), np.full(NE[t["tag"]], np.nan))[t["idx"] - off] = r_["preds"][t["tag"]]
+_pl = {c: {"y": Y[c], "vecs": {f"{m}_{w}": [p] for m in ("M2", "CKINN") for w, p in (("single", P[c][(m, 0, 0)]["none"]), ("pooled", POOLP[(m, c)]),
+                                                                                     ("pooled_indicator", PPI[(m, c)]))}, "stats": ["auroc", "brier"]}
+       for c in ("NAGALA", "RICH")}
+_b = AN.bootstrap(_pl, CFG.n_boot_desc, N_WORKERS)
+rows = []
+for c in ("NAGALA", "RICH"):
+    for m in ("M2", "CKINN"):
+        pt, dr = _b[c]["point"], _b[c]["draws"]
+        d = dr[(f"{m}_pooled_indicator", "auroc")] - dr[(f"{m}_pooled", "auroc")]
+        rows.append({"cohort": c, "model": m, "auroc_single": pt[(f"{m}_single", "auroc")], "auroc_pooled": pt[(f"{m}_pooled", "auroc")],
+                     "auroc_pooled_indicator": pt[(f"{m}_pooled_indicator", "auroc")],
+                     "indicator_minus_pooled": pt[(f"{m}_pooled_indicator", "auroc")] - pt[(f"{m}_pooled", "auroc")], "lo": AN.ci(d)[0], "hi": AN.ci(d)[1]})
+PHPOOL = pd.DataFrame(rows)
+for name, df in (("tablePH02_refit_reproducibility", REPRO), ("tablePH03_svm_performance", SVMPERF), ("tablePH04_violation_by_predictor", VIOL_FEAT),
+                 ("tablePH05_violation_all_models", VIOL_ALL), ("tablePH06_bmi_24_35_pairs", BMIPAIRS), ("tablePH07_variants", PHVAR),
+                 ("tablePH08_pooled_cohort_indicator", PHPOOL)):
+    df.to_csv(OUT / "tables" / f"{name}.csv", index=False)
+with pd.option_context("display.width", 250, "display.max_columns", 30, "display.max_rows", 200):
+    print(REPRO.to_string(index=False)); print(SVMPERF.round(4).to_string(index=False)); print(VIOL_ALL.round(4).to_string(index=False))
+    print(BMIPAIRS.round(4).to_string(index=False)); print(PHVAR[["cohort", "variant", "model", "auroc_diff", "auroc_diff_lo", "auroc_diff_hi", "brier_diff", "citl_diff"]].round(4).to_string(index=False))
+    print(PHPOOL.round(4).to_string(index=False))
+print(f"CELL PH2 OK | reproducibility, SVM, violations, variants and pooled-indicator tables | {time.perf_counter() - _t0:.0f}s")
+########## CELL 39 | end ##########
+
+########## CELL 40 | CODE | start ##########
+# CELL PH3 | train-by-test transport matrix for every model, seed 0 (step 12); intercept-only recalibration in the target with 1,000
+# participants, target labels used (step 17); older-and-lean stress test across lambda (step 10); RQ7: incident diabetes among people with
+# baseline FPG below 5.6 mmol/L (step 22); RICH one-step progression (proposal 3C); AUPRC and false-negative rate by group (step 16)
+_t0 = time.perf_counter()
+TRX0, TRREF0 = {(a, b, m): v for (a, b, m, s), v in TRX.items() if s == 0}, {(t, m): v for (t, m, s), v in TRREF.items() if s == 0}
+for s_ in [x for x in PHTR_SPECS if x["id"].startswith("phtrext")]:
+    TRX0[(s_["_src"], s_["_tgt"], s_["_model"])] = EN.load(CACHE, s_["id"])["preds"]["tgt"].astype(float)
+for _tgt in ("RICH", "NAGALA"):
+    _p = AN.collect([x for x in PHTR_SPECS if x["id"].startswith("phtrref") and x["_tgt"] == _tgt], NE[_tgt], CACHE, key=lambda s: s["_model"])[0]
+    TRREF0.update({(_tgt, m): v["none"].astype(float) for m, v in _p.items()})
+MATRIX_MODELS = ["LR", "cLR", "GAM", "RF", "XGB", "XGB_mono", "LGBM", "LGBM_mono", "SVM", "MI_LR", "M1", "M2", "CKINN"]
+_pl = {f"{src}->{tgt}": {"y": Y[tgt], "vecs": {**{f"ext_{m}": [TRX0[(src, tgt, m)]] for m in MATRIX_MODELS},
+                                                **{f"ref_{m}": [TRREF0[(tgt, m)]] for m in MATRIX_MODELS}}, "stats": ["auroc"]}
+       for src, tgt in (("NAGALA", "RICH"), ("RICH", "NAGALA"))}
+_b = AN.bootstrap(_pl, CFG.n_boot_desc, N_WORKERS)
+rows, rows_rc = [], []
+for m in MATRIX_MODELS:
+    row = {"model": m}
+    for src, tgt in (("NAGALA", "RICH"), ("RICH", "NAGALA")):
+        pt, dr = _b[f"{src}->{tgt}"]["point"], _b[f"{src}->{tgt}"]["draws"]
+        row[f"within_{tgt}_cv"] = pt[(f"ref_{m}", "auroc")]
+        row[f"{src}_to_{tgt}"] = pt[(f"ext_{m}", "auroc")]
+        row[f"gap_{src}_to_{tgt}"] = pt[(f"ref_{m}", "auroc")] - pt[(f"ext_{m}", "auroc")]
+        row[f"gap_{src}_to_{tgt}_lo"], row[f"gap_{src}_to_{tgt}_hi"] = AN.ci(dr[(f"ref_{m}", "auroc")] - dr[(f"ext_{m}", "auroc")])
+        y = Y[tgt]
+        cal = np.sort(np.random.default_rng(C.seed_for("recal", tgt)).choice(len(y), CFG.recal_n, replace=False))
+        rest = np.setdiff1d(np.arange(len(y)), cal)
+        p = TRX0[(src, tgt, m)]
+        a = MT.citl_w(y[cal], p[cal])
+        prc = 1 / (1 + np.exp(-(MT.logit(MT.clip(p)) + a)))
+        rows_rc.append({"source": src, "target": tgt, "model": m, "intercept_shift": a, "brier_before": MT.brier_w(y[rest], p[rest]),
+                        "brier_after": MT.brier_w(y[rest], prc[rest]), "citl_before": MT.citl_w(y[rest], p[rest]), "citl_after": MT.citl_w(y[rest], prc[rest]),
+                        "mean_predicted_after": float(prc[rest].mean()), "observed_rate": float(y[rest].mean())})
+    rows.append(row)
+TMATRIX, RECAL_INT = pd.DataFrame(rows), pd.DataFrame(rows_rc)
+# older-and-lean stress test (age 65 or more and BMI below 20) across lambda; lambda 0 is M2 (same configuration, seed and rows)
+rows, _pl = [], {}
+for c in COHORTS:
+    fr = EVAL[c]
+    g = np.flatnonzero(((fr.age_years >= 65) & (fr.bmi_kgm2 < 20)).to_numpy())
+    ev = int(Y[c][g].sum())
+    lam_vecs = {"lam_0": P[c][("M2", 0, 0)]["none"][g]}
+    lam_vecs.update({f"lam_{l:g}": PV[c][f"lam_{l:g}"]["none"][g] for l in CFG.lam_grid})
+    ok = ev >= CFG.min_group_events and (len(g) - ev) >= CFG.min_group_events
+    if ok:
+        _pl[c] = {"y": Y[c][g], "vecs": {k: [v] for k, v in lam_vecs.items()}, "stats": ["auroc", "citl"]}
+    for k, v in lam_vecs.items():
+        rows.append({"cohort": c, "lambda": float(k[4:]), "n": len(g), "events": ev, "estimable": ok, "mean_predicted": float(v.mean()) if len(g) else np.nan,
+                     "observed_rate": float(Y[c][g].mean()) if len(g) else np.nan})
+STRESS = pd.DataFrame(rows)
+if _pl:
+    _b = AN.bootstrap(_pl, CFG.n_boot_desc, N_WORKERS)
+    for col in ("auroc", "auroc_lo", "auroc_hi", "citl"):
+        STRESS[col] = np.nan
+    for c, b in _b.items():
+        for k in b["point"]:
+            if k[1] == "auroc":
+                ix = STRESS.index[(STRESS.cohort == c) & (STRESS["lambda"] == float(k[0][4:]))]
+                STRESS.loc[ix, "auroc"] = b["point"][k]
+                STRESS.loc[ix, ["auroc_lo", "auroc_hi"]] = AN.ci(b["draws"][k])
+                STRESS.loc[ix, "citl"] = b["point"][(k[0], "citl")]
+# RQ7: people below the impaired-fasting-glucose threshold at baseline
+RQ7_MODELS = ("LR", "XGB_mono", "M1", "M2", "CKINN")
+rows, _pl = [], {}
+for c in ("NAGALA", "RICH"):
+    g = np.flatnonzero((EVAL[c].fpg_mmol < 5.6).to_numpy())
+    _pl[f"T2|{c}"] = {"y": Y[c][g], "vecs": {m: [P[c][(m, r, s)]["none"][g] for r, s in MAINRUNS] for m in RQ7_MODELS}, "stats": ["auroc", "citl", "brier"]}
+    _pl[f"T3|{c}"] = {"y": Y[c][g], "vecs": {m: [PT3[c][(m, 0, 0)]["none"][g]] for m in RQ7_MODELS}, "stats": ["auroc", "citl", "brier"]}
+_b = AN.bootstrap(_pl, CFG.n_boot_desc, N_WORKERS)
+for key, b in _b.items():
+    tier, c = key.split("|")
+    g = np.flatnonzero((EVAL[c].fpg_mmol < 5.6).to_numpy())
+    for m in RQ7_MODELS:
+        vec = [P[c][(m, r, s)]["none"][g] for r, s in MAINRUNS] if tier == "T2" else [PT3[c][(m, 0, 0)]["none"][g]]
+        rows.append({"cohort": c, "tier": tier, "model": m, "runs": len(vec), "n": len(g), "events": int(Y[c][g].sum()), "auroc": b["point"][(m, "auroc")],
+                     "auroc_lo": AN.ci(b["draws"][(m, "auroc")])[0], "auroc_hi": AN.ci(b["draws"][(m, "auroc")])[1],
+                     "tpr_at_fpr_0.10": float(np.mean([MT.tpr_at_fpr_w(MT.Ranked(v, Y[c][g]), CFG.fpr_matched) for v in vec])),
+                     "citl": b["point"][(m, "citl")], "brier": b["point"][(m, "brier")]})
+RQ7 = pd.DataFrame(rows)
+# RICH one-step progression (healthy at baseline to FPG of 5.6 mmol/L or more, or diabetes)
+PROGP = AN.collect(PROG_SPECS, len(FR["RICH_prog"]), CACHE)[0]
+_yp = FR["RICH_prog"].y.to_numpy().astype(float)
+_b = AN.bootstrap({"prog": {"y": _yp, "vecs": {m: [PROGP[(m, 0, 0)]["none"]] for m in PH.PROGRESSION_MODELS}, "stats": ["auroc", "brier", "slope", "citl"]}},
+                  CFG.n_boot_desc, N_WORKERS)["prog"]
+rows = []
+for m in PH.PROGRESSION_MODELS:
+    row = {"model": m, "n": len(_yp), "events": int(_yp.sum()), "auroc": _b["point"][(m, "auroc")], "auroc_lo": AN.ci(_b["draws"][(m, "auroc")])[0],
+           "auroc_hi": AN.ci(_b["draws"][(m, "auroc")])[1], "auprc": AN.auprc(_yp, PROGP[(m, 0, 0)]["none"]), "brier": _b["point"][(m, "brier")],
+           "slope": _b["point"][(m, "slope")], "citl": _b["point"][(m, "citl")]}
+    for F in ("M2", "M1"):
+        if m == "CKINN":
+            d = _b["draws"][("CKINN", "auroc")] - _b["draws"][(F, "auroc")]
+            row[f"ckinn_minus_{F}"], (row[f"ckinn_minus_{F}_lo"], row[f"ckinn_minus_{F}_hi"]) = _b["point"][("CKINN", "auroc")] - _b["point"][(F, "auroc")], AN.ci(d)
+    rows.append(row)
+PROG = pd.DataFrame(rows)
+# AUPRC and false-negative rate (at the common threshold) by group
+rows = []
+for c in COHORTS:
+    fr, y = EVAL[c], Y[c]
+    for gt, gv in (("sex", fr.sex.to_numpy()), ("age_band", fr.age_band.to_numpy())):
+        for gname in sorted(pd.unique(gv), key=str):
+            ix = np.flatnonzero(gv == gname)
+            ok = y[ix].sum() >= CFG.min_group_events and (y[ix] == 0).sum() >= CFG.min_group_events
+            for m in FAIR_MODELS:
+                vals = [(AN.auprc(y[ix], P[c][(m, r, s)]["none"][ix]) if ok else np.nan,
+                         float(((P[c][(m, r, s)]["none"][ix] < THR[c][(m, r, s)][0][ix]) & (y[ix] == 1)).sum() / max((y[ix] == 1).sum(), 1)) if ok else np.nan)
+                        for r, s in MAINRUNS]
+                rows.append({"cohort": c, "group_type": gt, "group": str(gname), "model": m, "n": len(ix), "events": int(y[ix].sum()), "estimable": ok,
+                             "auprc": float(np.mean([v[0] for v in vals])), "fnr_common_thr": float(np.mean([v[1] for v in vals])),
+                             "prevalence": float(y[ix].mean())})
+GROUP_PR = pd.DataFrame(rows)
+for name, df in (("tablePH09_transport_matrix", TMATRIX), ("tablePH10_intercept_recalibration", RECAL_INT), ("tablePH11_stress_older_lean", STRESS),
+                 ("tablePH12_rq7_fpg_below_5_6", RQ7), ("tablePH13_rich_progression", PROG), ("tablePH14_auprc_fnr_by_group", GROUP_PR)):
+    df.to_csv(OUT / "tables" / f"{name}.csv", index=False)
+with pd.option_context("display.width", 250, "display.max_columns", 40, "display.max_rows", 200):
+    print(TMATRIX.round(4).to_string(index=False)); print(STRESS.round(4).to_string(index=False)); print(RQ7.round(4).to_string(index=False))
+    print(PROG.round(4).to_string(index=False))
+print(f"CELL PH3 OK | transport matrix, recalibration, stress test, RQ7, progression and group AUPRC tables | {time.perf_counter() - _t0:.0f}s")
+########## CELL 40 | end ##########
+
+########## CELL 41 | CODE | start ##########
+# CELL PH4 | SHAP summary and agreement with the priors and with integrated gradients (step 14); patient-level reasoning text for CKINN
+# (steps 15, 27; texts stay in the local cache); audit table and unavailable variables (step 5); sign table with references (step 6);
+# one scorecard per cohort and model (steps 24, 27); partial-dependence and SHAP figures (step 14)
+from scipy.stats import spearmanr
+_t0 = time.perf_counter()
+rows_imp, rows_dir, rows_ig, rows_rs = [], [], [], []
+for c in COHORTS:
+    task = TASK[c].task.iloc[0]
+    for s_ in REFIT_SPECS[c]:
+        if "shap" not in s_:
+            continue
+        r_ = EN.load(CACHE, s_["id"])
+        sh, m = r_["shap"], s_["_model"]
+        phi, x, feats = sh["phi"].astype(float), sh["x"].astype(float), sh["feats"]
+        imp = np.abs(phi).mean(0)
+        rows_imp += [{"cohort": c, "model": m, "feature": f, "mean_abs_shap": float(v), "rank": int(rk) + 1}
+                     for f, v, rk in zip(feats, imp, np.argsort(np.argsort(-imp)))]
+        for f, sgn in PL.signs_for("T2", feats).items():
+            jx = feats.index(f)
+            obs = ~np.isnan(x[:, jx])
+            if f in C.BINARY:
+                one, zero = obs & (x[:, jx] == 1), obs & (x[:, jx] == 0)
+                eff = float(phi[one, jx].mean() - phi[zero, jx].mean()) if one.any() and zero.any() else np.nan
+            else:
+                eff = float(spearmanr(x[obs, jx], phi[obs, jx])[0]) if obs.sum() > 2 and np.std(x[obs, jx]) > 0 else np.nan
+            rows_dir.append({"cohort": c, "model": m, "feature": f, "prior_sign": sgn, "shap_direction_statistic": eff,
+                             "agrees_with_prior": bool(np.sign(eff) == sgn) if np.isfinite(eff) else None})
+        if m in NN:
+            A = EN.load(CACHE, PL.tid("cv", c, "T2", "main", "r0", "k0", m, "s0"))["attr"].astype(float)
+            rows_ig.append({"cohort": c, "model": m, "spearman_mean_abs_shap_vs_mean_abs_ig": float(spearmanr(imp, np.abs(A).mean(0))[0])})
+        if "reason" in r_:
+            rec = r_["reason"]
+            texts = [PH.reasoning_text(rec, i, task) for i in range(len(rec["p"]))]
+            pd.DataFrame({"evaluation_row": s_["shap"]["idx"][:len(texts)], "text": texts}).to_csv(CACHE / "preds" / f"reasoning_{c}.csv", index=False)
+            top = [rec["feats"][int(np.argmax(np.abs(rec["phi"][i])))] for i in range(len(rec["p"]))]
+            drops = [np.nanmax(rec["p"][i] - rec["p_cf"][i]) if np.isfinite(rec["p_cf"][i]).any() else np.nan for i in range(len(rec["p"]))]
+            rows_rs.append({"cohort": c, "patients": len(texts), "share_consistent_with_all_priors": float((~rec["viol_point"].any(1)).mean()),
+                            "most_common_top_contributor": pd.Series(top).mode().iloc[0], "share_with_lowering_panel_counterfactual": float(np.mean([d > 0 for d in drops if np.isfinite(d)])) if any(np.isfinite(drops)) else np.nan,
+                            "median_largest_drop_in_probability": float(np.nanmedian([d for d in drops if np.isfinite(d) and d > 0])) if any(np.isfinite(d) and d > 0 for d in drops) else np.nan})
+SHAP_IMP, SHAP_DIR, SHAP_IG, REASON = pd.DataFrame(rows_imp), pd.DataFrame(rows_dir), pd.DataFrame(rows_ig), pd.DataFrame(rows_rs)
+AUDIT_TBL = PH.audit_table(TASK, FEATS, list(C.ALL_FEATURES) + ["tg_hdl_ratio", "prediabetes_told", "hypertension_told"])
+UNAVAIL = pd.DataFrame(PH.UNAVAILABLE, columns=["proposal_variable", "status_in_these_data"])
+SIGNREF = pd.DataFrame([{"predictor": f, "prior_sign": "+" if C.SIGNS_T3.get(f, 1 if f == "dbp_mmHg" else 0) > 0 else "-",
+                         "used_in": "T2 and T3" if f in C.SIGNS_T2 else ("T3 only" if f in C.SIGNS_T3 else "post hoc variant"), "pmid": pm, "reference": ref}
+                        for f, (pm, ref) in PH.SIGN_CITATIONS.items()])
+# scorecard: one row per cohort and model (run-averaged where five runs exist)
+_sc_models = list(C.MAIN_MODELS) + ["SVM"]
+_perf = pd.concat([PERF[PERF.model.isin(C.MAIN_MODELS)][["cohort", "model", "auroc", "auprc", "brier", "slope", "citl", "ece"]],
+                   SVMPERF[["cohort", "model", "auroc", "auprc", "brier", "slope", "citl"]]], ignore_index=True)
+rows = []
+for c in COHORTS:
+    y = Y[c]
+    for m in _sc_models:
+        PP, TT = (SVMP[c], SVMTHR[c]) if m == "SVM" else (P[c], THR[c])
+        tm = [MT.threshold_metrics(y, PP[(m, r, s)]["none"], TT[(m, r, s)][0]) for r, s in MAINRUNS]
+        g = GROUPS[c]
+        sexgap = float(np.mean([abs(MT.tpr_at_fpr_w(MT.Ranked(PP[(m, r, s)]["none"][g["sex"][0]], y[g["sex"][0]]), CFG.fpr_matched)
+                                    - MT.tpr_at_fpr_w(MT.Ranked(PP[(m, r, s)]["none"][g["sex"][1]], y[g["sex"][1]]), CFG.fpr_matched)) for r, s in MAINRUNS])) if len(g["sex"]) == 2 else np.nan
+        row = {"cohort": c, "model": m, **{k: float(np.mean([t[k] for t in tm])) for k in ("sens", "spec", "ppv", "npv")}, "sex_gap_tpr_at_fpr_0.10": sexgap}
+        va = VIOL_ALL[(VIOL_ALL.cohort == c) & (VIOL_ALL.model == m)]
+        row["violation_rate_perturbation"] = float(va.violation_rate.iloc[0]) if len(va) else np.nan
+        bp = BMIPAIRS[(BMIPAIRS.cohort == c) & (BMIPAIRS.model == m)]
+        row["bmi_pair_share_lower"] = float(bp.share_lower.iloc[0]) if len(bp) else np.nan
+        if c in ("NAGALA", "RICH") and m in MATRIX_MODELS:
+            src = "RICH" if c == "NAGALA" else "NAGALA"
+            row["transport_gap_into_this_cohort"] = float(TMATRIX.loc[TMATRIX.model == m, f"gap_{src}_to_{c}"].iloc[0])
+        rows.append(row)
+SCORECARD = _perf.merge(pd.DataFrame(rows), on=["cohort", "model"], how="right")
+for name, df in (("tablePH15_shap_importance", SHAP_IMP), ("tablePH16_shap_direction_vs_prior", SHAP_DIR), ("tablePH17_shap_vs_integrated_gradients", SHAP_IG),
+                 ("tablePH18_reasoning_summary", REASON), ("tablePH19_predictor_audit", AUDIT_TBL), ("tablePH20_unavailable_variables", UNAVAIL),
+                 ("tablePH21_sign_table_references", SIGNREF), ("tablePH22_scorecard", SCORECARD)):
+    df.to_csv(OUT / "tables" / f"{name}.csv", index=False)
+# figures: partial dependence (repeat 0, averaged over folds) and mean |SHAP|
+_FIG = OUT / "figures"
+_col = {"M2": "#2a78d6", "CKINN": "#eb6834", "LR": "#6250d6", "XGB_mono": "#52514e"}
+_mk = {"M2": "o", "CKINN": "s", "LR": "D", "XGB_mono": "v"}
+_pdf = {c: [f for f in PL.signs_for("T2", FEATS[(c, "T2")]) if f not in C.BINARY] for c in COHORTS}
+_nc = max(len(v) for v in _pdf.values())
+fig, axs = plt.subplots(3, _nc, figsize=(2.3 * _nc, 6.6), squeeze=False)
+for ri, c in enumerate(COHORTS):
+    for ci in range(_nc):
+        ax = axs[ri][ci]
+        if ci >= len(_pdf[c]):
+            ax.axis("off")
+            continue
+        f = _pdf[c][ci]
+        for m in ("M2", "CKINN", "XGB_mono", "LR"):
+            cur = [EN.load(CACHE, PL.tid("cv", c, "T2", "main", "r0", f"k{k}", m, "s0"))["pd"][f] for k in range(CFG.n_splits)]
+            ax.plot(np.mean([q["grid"] for q in cur], 0), np.mean([q["pd"] for q in cur], 0), marker=_mk[m], ms=3, color=_col[m], label=m, lw=1.2)
+        ax.set_title(f"{c}: {PH.LABELS.get(f, f)}", fontsize=7)
+        ax.tick_params(labelsize=6)
+axs[0][0].legend(fontsize=6)
+fig.supylabel("mean predicted risk (partial dependence)", fontsize=8)
+fig.tight_layout()
+for e, kw in (("pdf", {}), ("png", {"dpi": 300})):
+    fig.savefig(_FIG / f"figPH1_partial_dependence.{e}", bbox_inches="tight", **kw)
+plt.close(fig)
+fig, axs = plt.subplots(1, 3, figsize=(11, 3.6))
+for ax, c in zip(axs, COHORTS):
+    sub = SHAP_IMP[(SHAP_IMP.cohort == c) & SHAP_IMP.model.isin(["M2", "CKINN", "XGB_mono"])]
+    order = sub[sub.model == "CKINN"].sort_values("mean_abs_shap").feature.tolist()
+    for k, m in enumerate(("M2", "CKINN", "XGB_mono")):
+        v = sub[sub.model == m].set_index("feature").reindex(order).mean_abs_shap
+        ax.barh(np.arange(len(order)) + (k - 1) * 0.27, v, height=0.25, color=_col[m], label=m)
+    ax.set_yticks(range(len(order)))
+    ax.set_yticklabels([PH.LABELS.get(f, f) for f in order], fontsize=6)
+    ax.set_title(f"{c}: mean |SHAP| (log-odds)", fontsize=8)
+axs[0].legend(fontsize=6)
+fig.tight_layout()
+for e, kw in (("pdf", {}), ("png", {"dpi": 300})):
+    fig.savefig(_FIG / f"figPH2_shap_importance.{e}", bbox_inches="tight", **kw)
+plt.close(fig)
+with pd.option_context("display.width", 250, "display.max_columns", 40, "display.max_rows", 120):
+    print(SHAP_DIR.groupby(["cohort", "model"]).agrees_with_prior.mean().round(3).to_string()); print(SHAP_IG.round(3).to_string(index=False))
+    print(REASON.round(3).to_string(index=False)); print(SCORECARD.round(4).to_string(index=False))
+print(f"CELL PH4 OK | SHAP, reasoning summary, audit, references, scorecard and two figures | {time.perf_counter() - _t0:.0f}s")
+########## CELL 41 | end ##########
+
+########## CELL 42 | CODE | start ##########
 # CELL 36 | figures: vector PDF and 300 dpi PNG. Colours follow the model, never its rank: M2 blue, CKINN orange, M1 aqua, LR violet;
 # every series also has its own marker and line style, so identity never rests on colour alone
 _t0 = time.perf_counter()
@@ -3420,9 +4273,9 @@ savefig(fig, "fig6_constraint_variants")
 assert all((FIG / f"{n}.{e}").exists() for n in ("fig1_hypothesis_endpoints", "fig2_calibration", "fig3_decision_curves", "fig4_missingness",
                                                   "fig5_seed_and_split_variation", "fig6_constraint_variants") for e in ("pdf", "png"))
 print(f"CELL 36 OK | six figures saved as PDF and 300 dpi PNG | {time.perf_counter() - _t0:.0f}s")
-########## CELL 36 | end ##########
+########## CELL 42 | end ##########
 
-########## CELL 37 | CODE | start ##########
+########## CELL 43 | CODE | start ##########
 # CELL 37 | LaTeX (booktabs) exports of the main tables; every value formatted from the stored CSV tables
 _t0 = time.perf_counter()
 
@@ -3456,9 +4309,9 @@ latex_table(_rd("table10_verdicts"), OUT / "latex" / "table_verdicts.tex", "Pre-
 latex_table(_rd("table11_h1_crosschecks")[["family", "cohort", "auroc_diff_runavg", "boot_lo", "boot_hi", "delong_p", "nb_lo", "nb_hi", "p_tost_margin_0.01"]],
             OUT / "latex" / "table_h1_crosschecks.tex", "Cross-checks of the AUROC comparison.", "tab:h1x", 4)
 print(f"CELL 37 OK | LaTeX tables written | {time.perf_counter() - _t0:.0f}s")
-########## CELL 37 | end ##########
+########## CELL 43 | end ##########
 
-########## CELL 38 | CODE | start ##########
+########## CELL 44 | CODE | start ##########
 # CELL 38 | generated results report (report.md): every number is formatted by code from a stored table
 _t0 = time.perf_counter()
 REP = OUT / "report"
@@ -3526,6 +4379,8 @@ LIMITS = [
     "declared rule takes the largest lambda within one standard error, so CKINN here is a strongly constrained network.",
     "Bootstrap intervals hold the fitted models fixed; the corrected repeated-CV t-test, which allows for training variability, gives wider intervals. "
     "Intervals for the IPCW time-dependent AUROC hold the censoring distribution fixed.",
+    "Section 12 holds post hoc analyses decided after the v2 results were seen; they describe the models further and cannot support "
+    "a confirmatory claim. The reasoning texts and SHAP values are model behaviour, not causal effects or advice.",
     "Outputs are risk estimates from retrospective research data; they are not diagnoses and have not been validated for clinical use.",
 ]
 REPORT = f"""# CKINN versus M1 and M2 on real data, version 2: results report (generated)
@@ -3618,15 +4473,74 @@ dependence with the prior:
 ## 11. Sensitivity analyses (E)
 {md_table(T["table34_sensitivity"], 4)}
 
-## 12. Limitations
+## 12. Post hoc additions for the 28-step protocol (PH; decided after the v2 results, no verdict depends on them)
+Refits that repeat a main-run fit (largest absolute difference from the stored predictions; 0 means identical):
+
+{md_table(T["tablePH02_refit_reproducibility"], 6)}
+
+SVM (radial-kernel approximation, Platt scaling), run-averaged, and CKINN minus SVM:
+
+{md_table(T["tablePH03_svm_performance"], 4)}
+
+Violation rate for every model (log-odds change against the prior after +0.25 SD or a 0-to-1 change; Wilson intervals):
+
+{md_table(T["tablePH05_violation_all_models"], 4)}
+
+BMI set to 24 and to 35 in the same held-out people: share whose predicted risk is lower at 35:
+
+{md_table(T["tablePH06_bmi_24_35_pairs"], 4)}
+
+Variants (each against the same model fitted without the change, repeat 0):
+
+{md_table(T["tablePH07_variants"][["cohort", "variant", "model", "auroc_diff", "auroc_diff_lo", "auroc_diff_hi", "brier_diff", "citl_diff", "tpr_sex_gap_diff", "tpr_age_range_diff"]], 4)}
+
+Pooled NAGALA plus RICH training with a cohort indicator:
+
+{md_table(T["tablePH08_pooled_cohort_indicator"], 4)}
+
+Train-by-test AUROC matrix (seed 0):
+
+{md_table(T["tablePH09_transport_matrix"], 4)}
+
+Intercept-only recalibration in the target (1,000 participants, target labels used):
+
+{md_table(T["tablePH10_intercept_recalibration"], 4)}
+
+Older and lean subgroup (age 65 or more, BMI below 20) across lambda; not estimable below 20 events:
+
+{md_table(T["tablePH11_stress_older_lean"], 4)}
+
+RQ7, participants with baseline fasting glucose below 5.6 mmol/L:
+
+{md_table(T["tablePH12_rq7_fpg_below_5_6"], 4)}
+
+RICH one-step progression (baseline FPG below 5.6 mmol/L; outcome FPG of 5.6 mmol/L or more at the final visit, or diabetes):
+
+{md_table(T["tablePH13_rich_progression"], 4)}
+
+SHAP direction against the priors (share of constrained predictors whose SHAP dependence has the prior's sign) and agreement with integrated gradients:
+
+{md_table(T["tablePH16_shap_direction_vs_prior"].groupby(["cohort", "model"]).agrees_with_prior.mean().reset_index(), 3)}
+
+{md_table(T["tablePH17_shap_vs_integrated_gradients"], 3)}
+
+Patient-level reasoning text for CKINN (texts are row-level and stay in the local cache):
+
+{md_table(T["tablePH18_reasoning_summary"], 3)}
+
+Scorecard (one row per cohort and model):
+
+{md_table(T["tablePH22_scorecard"], 4)}
+
+## 13. Limitations
 {chr(10).join('- ' + x for x in LIMITS)}
 """
 (REP / "report.md").write_text(REPORT, encoding="utf-8")
 print(REPORT[:3000])
 print(f"CELL 38 OK | report.md written ({len(REPORT):,} characters) | {time.perf_counter() - _t0:.0f}s")
-########## CELL 38 | end ##########
+########## CELL 44 | end ##########
 
-########## CELL 39 | CODE | start ##########
+########## CELL 45 | CODE | start ##########
 # CELL 39 | manuscript-ready Methods and Results draft (British spelling); numbers formatted from stored tables only
 _t0 = time.perf_counter()
 _dc, _sp = T["table01_data_card"].set_index("cohort"), T["table04_split"].set_index("cohort")
@@ -3686,9 +4600,9 @@ _Draft for the manuscript. British (Oxford) spelling. Every number in this file 
 (REP / "methods_results_draft.md").write_text(METHODS, encoding="utf-8")
 print(METHODS[:2500])
 print(f"CELL 39 OK | Methods and Results draft written | {time.perf_counter() - _t0:.0f}s")
-########## CELL 39 | end ##########
+########## CELL 45 | end ##########
 
-########## CELL 40 | CODE | start ##########
+########## CELL 46 | CODE | start ##########
 # CELL 40 | TRIPOD+AI checklist filled from what the code did (item wording abbreviated; check the numbering against the official
 # checklist before submission: TODO(verify))
 _t0 = time.perf_counter()
@@ -3723,9 +4637,9 @@ TRIPOD_MD = "# TRIPOD+AI checklist (filled from what the code did)\n\nItem wordi
     md_table(pd.DataFrame(TRIPOD, columns=["Section", "Item (abbreviated)", "Where addressed in this study"])) + "\n"
 (REP / "TRIPOD_AI_checklist.md").write_text(TRIPOD_MD, encoding="utf-8")
 print(f"CELL 40 OK | TRIPOD+AI checklist written | {time.perf_counter() - _t0:.0f}s")
-########## CELL 40 | end ##########
+########## CELL 46 | end ##########
 
-########## CELL 41 | CODE | start ##########
+########## CELL 47 | CODE | start ##########
 # CELL 41 | integrity scan: configuration hash; every decimal number in the report and the draft traces to a stored table or to the
 # configuration; no result-like number in this notebook's markdown cells; no row-level file among the archived outputs
 _t0 = time.perf_counter()
@@ -3734,6 +4648,7 @@ assert _fz["sha256"] == C.config_hash(CFG) == PROTOCOL_HASH, "configuration chan
 _vals = np.concatenate([t.select_dtypes(include=[float, int]).to_numpy(float).ravel() for t in T.values()])
 _cfgv = [float(v) for v in json.loads(CFG.to_json()).values() if isinstance(v, (int, float)) and not isinstance(v, bool)]
 _cfgv += [float(x) for v in json.loads(CFG.to_json()).values() if isinstance(v, list) for x in v if isinstance(x, (int, float))]
+_cfgv += [float(v) for v in PH.settings(CFG).values()]                  # post hoc settings quoted in the report text
 _vals = np.concatenate([_vals[np.isfinite(_vals)], np.array(_cfgv)])
 _untraced = []
 for name, text in (("report.md", REPORT), ("methods_results_draft.md", METHODS)):
@@ -3754,15 +4669,15 @@ else:
 _archived = [p for p in OUT.rglob("*") if p.is_file() and CACHE not in p.parents]
 assert not [p for p in _archived if p.suffix in (".npz", ".pkl", ".xlsx") or p.name.startswith("_raw_")], "row-level file outside the cache"
 print(f"CELL 41 OK | {len(_untraced)} untraced numbers; configuration hash intact | {time.perf_counter() - _t0:.0f}s")
-########## CELL 41 | end ##########
+########## CELL 47 | end ##########
 
-########## CELL 42 | CODE | start ##########
+########## CELL 48 | CODE | start ##########
 # CELL 42 | runtime, manifest with package versions, input and output hashes, and the outputs archive (aggregate files only)
 _t0 = time.perf_counter()
 _rt = []
 for stage, specs in (("tuning", [s for v in _specs.values() for s in v] + [s for v in _lspecs.values() for s in v]),
                      ("main runs and seed study", [s for c in CV_SPECS for s in CV_SPECS[c] + SEED_SPECS[c]]), ("repeat-0 analyses", _all),
-                     ("transport, pooled, sites", TR_SPECS + POOL_SPECS + SITE_SPECS)):
+                     ("transport, pooled, sites", TR_SPECS + POOL_SPECS + SITE_SPECS), ("post hoc (PH)", PH_ALL_SPECS)):
     secs = [EN.load(CACHE, s["id"])["seconds"] for s in specs]
     _rt.append({"stage": stage, "tasks": len(specs), "cpu_seconds": float(np.sum(secs)), "median_task_seconds": float(np.median(secs))})
 RUNTIME = pd.DataFrame(_rt)
@@ -3782,10 +4697,10 @@ with zipfile.ZipFile(OUT / f"ckinn_v2_outputs_{CFG.mode}.zip", "w", zipfile.ZIP_
         z.write(p, p.relative_to(OUT))
 print(f"{len(_files)} files archived in {OUT / f'ckinn_v2_outputs_{CFG.mode}.zip'} (cache with row-level data excluded)")
 print(f"CELL 42 OK | manifest and archive written | total wall time {time.perf_counter() - T_START:.0f}s")
-########## CELL 42 | end ##########
+########## CELL 48 | end ##########
 
-########## CELL 43 | MARKDOWN | start ##########
+########## CELL 49 | MARKDOWN | start ##########
 ## References and citation policy
 Only sources checked in PubMed or Scite are listed without a flag; anything else carries TODO(cite) and must be checked before submission. The verified list is kept in `references.md` next to this notebook.
-########## CELL 43 | end ##########
+########## CELL 49 | end ##########
 
