@@ -1,0 +1,12 @@
+predictor,prior_sign,used_in,pmid,reference
+age_years,+,T2 and T3,17533210,"Wilson et al. 2007, Arch Intern Med (Framingham Offspring)"
+bmi_kgm2,+,T2 and T3,20493574,"Abdullah et al. 2010, Diabetes Res Clin Pract (meta-analysis)"
+waist_cm,+,T2 and T3,17494056,"Vazquez et al. 2007, Epidemiol Rev (meta-analysis)"
+sbp_mmHg,+,T2 and T3,26429079,"Emdin et al. 2015, J Am Coll Cardiol (4.1 million adults and meta-analysis)"
+dbp_mmHg,+,post hoc variant,26429079,"Emdin et al. 2015, J Am Coll Cardiol (4.1 million adults and meta-analysis)"
+family_history_dm,+,T2 and T3,23052052,"InterAct Consortium 2013, Diabetologia"
+tg_mmol,+,T2 and T3,17533210,"Wilson et al. 2007, Arch Intern Med (Framingham Offspring)"
+hdl_mmol,-,T2 and T3,17533210,"Wilson et al. 2007, Arch Intern Med (Framingham Offspring)"
+exercise_regular,-,T2 and T3,26092138,"Aune et al. 2015, Eur J Epidemiol (meta-analysis)"
+fpg_mmol,+,T3 only,17533210,"Wilson et al. 2007, Arch Intern Med (Framingham Offspring)"
+hba1c_pct,+,T3 only,20587727,"Zhang et al. 2010, Diabetes Care (systematic review)"

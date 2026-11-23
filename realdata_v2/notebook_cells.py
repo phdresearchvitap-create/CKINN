@@ -1490,7 +1490,7 @@ LIMITS = [
     "declared rule takes the largest lambda within one standard error, so CKINN here is a strongly constrained network.",
     "Bootstrap intervals hold the fitted models fixed; the corrected repeated-CV t-test, which allows for training variability, gives wider intervals. "
     "Intervals for the IPCW time-dependent AUROC hold the censoring distribution fixed.",
-    "Section 12 holds post hoc analyses decided after the v2 results were seen; they describe the models further and cannot support "
+    "The post hoc analyses (label PH; section 12 of report.md) were decided after the v2 results were seen; they describe the models further and cannot support "
     "a confirmatory claim. The reasoning texts and SHAP values are model behaviour, not causal effects or advice.",
     "Outputs are risk estimates from retrospective research data; they are not diagnoses and have not been validated for clinical use.",
 ]

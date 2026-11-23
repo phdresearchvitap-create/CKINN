@@ -1,0 +1,4 @@
+cohort,patients,share_consistent_with_all_priors,most_common_top_contributor,share_with_lowering_panel_counterfactual,median_largest_drop_in_probability
+NAGALA,50,0.94,age_years,0.96,0.0012470020850727593
+RICH,50,1.0,age_years,0.9,0.0019188392376661492
+NHANES,50,1.0,age_years,0.98,0.0021003908159398198

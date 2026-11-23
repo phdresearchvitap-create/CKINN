@@ -1,0 +1,23 @@
+predictor,missing_pct_NAGALA,used_NAGALA,missing_pct_RICH,used_RICH,missing_pct_NHANES,used_NHANES,available_at_prediction_time,leakage_risk,fairness_relevance,prior_sign
+age_years,0.0,T2,0.0,T2,0.0,T2,yes (baseline measurement or questionnaire),low,group variable for subgroup analysis (also a predictor),+
+sex_female,0.0,T2,0.0,T2,0.0,T2,yes (baseline measurement or questionnaire),low,group variable for subgroup analysis (also a predictor),unconstrained
+bmi_kgm2,0.0,T2,0.0,T2,1.305678340700442,T2,yes (baseline measurement or questionnaire),low,none,+
+waist_cm,0.0,T2,100.0,,4.501870112206732,T2,yes (baseline measurement or questionnaire),low,none,+
+sbp_mmHg,0.0,T2,0.01085760953203703,T2,4.019041142468549,T2,yes (baseline measurement or questionnaire),low,none,+
+dbp_mmHg,0.0,T2,0.011329679511690813,T2,4.481468888133288,T2,yes (baseline measurement or questionnaire),low,none,unconstrained
+smoker,0.0,T2,71.5672251254526,T2,100.0,,yes (baseline measurement or questionnaire),low,none,unconstrained
+alcohol_level,0.0,T2,100.0,,20.29581774906494,T2,yes (baseline measurement or questionnaire),low,none,unconstrained
+exercise_regular,0.0,T2,100.0,,22.278136688201293,T2,yes (baseline measurement or questionnaire),low,none,-
+family_history_dm,100.0,,0.0,T2,1.846310778646719,T2,yes (baseline measurement or questionnaire),low,none,+
+tg_mmol,0.0,T2,2.7129861730702958,T2,52.84937096225774,T2,yes (baseline measurement or questionnaire),low,none,+
+hdl_mmol,0.07113295395757889,T2,44.688032553945796,T2,1.2342740564433865,T2,yes (baseline measurement or questionnaire),low,none,-
+ldl_mmol,100.0,,44.101721639215796,T2,53.78102686161169,T2,yes (baseline measurement or questionnaire),low,none,unconstrained
+tc_mmol,0.0,T2,2.291427681239467,T2,1.2308738524311458,T2,yes (baseline measurement or questionnaire),low,none,unconstrained
+alt_u_l,0.0,T2,0.8421728437023503,T2,1.6082964977898673,T2,yes (baseline measurement or questionnaire),low,none,unconstrained
+ast_u_l,0.0,T2,58.20197986149467,T2,1.6660999659979598,T2,yes (baseline measurement or questionnaire),low,none,unconstrained
+ggt_u_l,0.0,T2,100.0,,1.5402924175450527,T2,yes (baseline measurement or questionnaire),low,none,unconstrained
+fpg_mmol,0.0, T3,0.0, T3,51.900714042842566,,yes (baseline measurement or questionnaire),"high: defines the detection label, banned for NHANES; incident task only in T3",none,+
+hba1c_pct,0.0, T3,100.0,,0.06460387623257395,,yes (baseline measurement or questionnaire),"high: defines the detection label, banned for NHANES; incident task only in T3",none,+
+tg_hdl_ratio,0.07113295395757889,,44.83626252755709,,52.84937096225774,,yes (baseline measurement or questionnaire),low,none,unconstrained
+prediabetes_told,100.0,,100.0,,20.190411424685482,,yes (baseline measurement or questionnaire),moderate: implies an earlier glucose test; exploratory only,none,unconstrained
+hypertension_told,100.0,,100.0,,0.3094185651139068,,yes (baseline measurement or questionnaire),low,none,unconstrained

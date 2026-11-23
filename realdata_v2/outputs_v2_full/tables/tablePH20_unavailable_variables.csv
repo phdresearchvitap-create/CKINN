@@ -1,0 +1,11 @@
+proposal_variable,status_in_these_data
+ethnicity / ancestry,NHANES only (descriptive fairness groups); absent in NAGALA and RICH
+previous prediabetes,"NHANES only (DIQ160, cycles 2005-06 onwards); post hoc exploratory input"
+cardiovascular disease,not in any of the three files used
+hypertension diagnosis,NHANES only (BPQ020); post hoc exploratory input
+glucose-lowering medication,"NHANES only; used to define the exclusions of the detection label, not as an input"
+diet,not in any of the three files
+sleep,not in any of the three files
+earlier glucose readings,not in any of the three files
+weight and height,NAGALA weight and RICH height and weight exist; BMI is used instead (derived from them)
+socio-economic status,not in any of the three files

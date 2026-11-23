@@ -1,5 +1,5 @@
 {
-  "created_utc": "2026-11-20T16:16:44+00:00",
+  "created_utc": "2026-11-21T12:16:04+00:00",
   "mode": "full",
   "configuration_sha256": "7cdc5bdde12b17df19a15650f00f1fe693168b33f39b193219ded6d70ea0468b",
   "configuration": {
@@ -127,7 +127,7 @@
     "platform": "Linux-6.18.44-fc-v726-x86_64-with-glibc2.39"
   },
   "workers": 4,
-  "wall_seconds": 1648.2635539849998,
+  "wall_seconds": 2210.530898793,
   "chosen_hyperparameters": {
     "NAGALA|GAM": {
       "C": 0.1
@@ -380,6 +380,15 @@
       ],
       "lr": 0.001,
       "weight_decay": 0.001
+    },
+    "NAGALA|SVM": {
+      "C": 0.1
+    },
+    "RICH|SVM": {
+      "C": 0.01
+    },
+    "NHANES|SVM": {
+      "C": 0.01
     }
   },
   "chosen_lambda": {
@@ -497,14 +506,15 @@
   "library_sha256": {
     "__init__.py": "f744bda01b3cc980bd829cea7773ef7b8a34268d4daf3536f0aeafac1371963b",
     "analysis.py": "ec758a7d47288e8441525706300d8b459901505ebed4a67866021b68032e6843",
-    "config.py": "ef740a239f59b8f67b2382b9bf8434dd23d2ea09ba3045dbd3e9b405d0547be5",
-    "data.py": "2381f9bbebba28d9fb75092f7f247359637a0510f419c3e9b11e2c63572ea56e",
-    "engine.py": "a7efffe2deea49057b7ed9884f20a79d78f220aaddf4d6f6a20fd52d670bf9a1",
+    "config.py": "3459b8fb87575f47a8ffd1a76b07ddceddb4e57c1ee2fe89c3190e902164bf54",
+    "data.py": "05cacaf717dceb0025c3a4a5388912fa1fc6a4f599e45c809882e9205bd69b6c",
+    "engine.py": "92dc65397ba030292842e41e536c5e8549d24dc2bbddb55934b7852594446141",
     "metrics.py": "6f176140e243a7037dd92a33b32256167fedec6477c9691e9478ef9361bba936",
     "missing.py": "235968a977cdff84f6040e2c58737aeaaf578409792f8f8513d1733af0666b6c",
-    "models.py": "7f6c6566add418e18c9ed97f2602c6ff8e62aedf32cd65d9ae6bc662c27b26fc",
+    "models.py": "7c29a657772697d86d563e5cbd78a9fce9e55e9092bab7f2a9db4fe85bcf8476",
     "nets.py": "09caeb2e290424345d52cd49b1eaa32604c37d3a55ed112fa160c8aca25e4eea",
     "plan.py": "73674d27b44c732f737681a2f47049d98bc7384b894fe7180bb03a48c77f9ebd",
+    "posthoc.py": "d6de9b6d5e46e5c65c835c26004009a0cb89adc812c65ec6524b5732381b8290",
     "prep.py": "1bd045963211b96be7c5a202c445390b7e8a2cf980f973ccf300dc8ddbf140a7"
   }
 }
