@@ -1,0 +1,7 @@
+comparison,lambda_value,delta_brier,delta_lo,delta_hi,delta_valid_boot,requested_boot,failed_boot,profile,evidence_use
+lambda 1 minus lambda 0 (six directions),1.0,-1.94706275666659e-07,-3.3885812634028636e-07,-6.50027922659237e-08,1000,1000,0,STANDARD,scientific reanalysis
+lambda 10 minus lambda 0 (six directions),10.0,-1.798690851526931e-06,-3.1349877851938453e-06,-6.034745342633132e-07,1000,1000,0,STANDARD,scientific reanalysis
+lambda 100 minus lambda 0 (six directions),100.0,-1.0740845807162558e-05,-1.8798967438154623e-05,-3.5138713586763783e-06,1000,1000,0,STANDARD,scientific reanalysis
+lambda 1000 minus lambda 0 (six directions),1000.0,-2.0101767053944467e-05,-3.6421530434520874e-05,-5.593653208636665e-06,1000,1000,0,STANDARD,scientific reanalysis
+lambda 10000 minus lambda 0 (six directions),10000.0,-2.0520864436835047e-05,-3.835741993166702e-05,-5.202721371194839e-06,1000,1000,0,STANDARD,scientific reanalysis
+lambda 100000 minus lambda 0 (six directions),100000.0,-1.870926485680012e-05,-3.5790573409426794e-05,-3.702187480573994e-06,1000,1000,0,STANDARD,scientific reanalysis

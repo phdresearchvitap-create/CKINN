@@ -1,0 +1,2 @@
+comparison,task,lambda_candidate,lambda_baseline,n,known_cases,candidate_brier,baseline_brier,delta,delta_lo,delta_hi,delta_valid_boot,requested_boot,failed_boot,profile,evidence_use
+M3 minus M1,A,10,0.0,15459,101,0.007587424480657098,0.007587619172484778,-1.9469182767958143e-07,-6.105669175180718e-07,1.4324639782130514e-07,200,200,0,STANDARD,scientific reanalysis

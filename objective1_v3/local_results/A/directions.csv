@@ -1,0 +1,15 @@
+model,deployment,feature,raw_step,n_sample,n_eligible,violations,violation_rate,mean_wrong_way_change,meaningful_fraction,flat_fraction,gradient_violation_rate,max_standardized_check_error,finite_gradient_check,profile,evidence_use
+M1,frozen_average,bmi,1.0,512,492,0,0.0,0.0,0.2703252032520325,0.0,0.0,1.998618245125768e-06,True,STANDARD,scientific reanalysis
+M1,frozen_average,fpg,0.1,512,501,0,0.0,0.0,0.36926147704590817,0.0,0.0,2.7343630790755774e-06,True,STANDARD,scientific reanalysis
+M3,frozen_average,bmi,1.0,512,492,0,0.0,0.0,0.2703252032520325,0.0,0.0,1.3839453458785075e-06,True,STANDARD,scientific reanalysis
+M3,frozen_average,fpg,0.1,512,501,0,0.0,0.0,0.36926147704590817,0.0,0.0,1.6130506992337513e-06,True,STANDARD,scientific reanalysis
+fixed_zero,frozen_average,bmi,1.0,512,492,0,0.0,0.0,0.2703252032520325,0.0,0.0,1.998618245125768e-06,True,STANDARD,scientific reanalysis
+fixed_zero,frozen_average,fpg,0.1,512,501,0,0.0,0.0,0.36926147704590817,0.0,0.0,2.7343630790755774e-06,True,STANDARD,scientific reanalysis
+fixed_positive,frozen_average,bmi,1.0,512,492,0,0.0,0.0,0.2703252032520325,0.0,0.0,1.5776604413985253e-06,True,STANDARD,scientific reanalysis
+fixed_positive,frozen_average,fpg,0.1,512,501,0,0.0,0.0,0.36926147704590817,0.0,0.0,1.3634562492338547e-06,True,STANDARD,scientific reanalysis
+expanded_prior,frozen_average,fpg,0.1,512,501,0,0.0,0.0,0.36926147704590817,0.0,0.0,1.7322599887873693e-06,True,STANDARD,scientific reanalysis
+expanded_prior,frozen_average,bmi,1.0,512,492,0,0.0,0.0,0.2703252032520325,0.0,0.0,1.5245750546447392e-06,True,STANDARD,scientific reanalysis
+expanded_prior,frozen_average,age,1.0,512,506,0,0.0,0.0,0.04940711462450593,0.0,0.0,2.047047019004448e-06,True,STANDARD,scientific reanalysis
+expanded_prior,frozen_average,sbp,5.0,512,503,292,0.5805168986083499,3.5027658968847285e-05,0.017892644135188866,0.013916500994035786,0.6500994035785288,1.3229437172416322e-06,True,STANDARD,scientific reanalysis
+expanded_prior,frozen_average,tg,0.1,512,452,0,0.0,0.0,0.011061946902654867,0.0,0.0,1.6023404896262793e-06,True,STANDARD,scientific reanalysis
+expanded_prior,frozen_average,hdl,0.1,512,466,382,0.8197424892703863,0.0001992807973275169,0.055793991416309016,0.02575107296137339,0.869098712446352,1.3802200555797821e-06,True,STANDARD,scientific reanalysis
