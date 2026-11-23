@@ -60,3 +60,13 @@ E9b. Paired NAGALA Brier difference of every lambda on the E9 path against lambd
 architecture, epochs, seed and data), 1,000 paired bootstrap draws with G re-estimated, percentile intervals. Added
 because E9 showed lower NAGALA error at large lambda without an interval. Descriptive; it does not change the
 pre-specified E9 selection rule, which chose lambda by RICH inner-validation error.
+
+## Addendum 2 (written 2026-11-23 before E12 or the proposal table was computed)
+
+E12. Calibration contrast for H2. In NAGALA, paired bootstrap (1,000 draws, G re-estimated) of
+|calibration intercept|, |calibration slope - 1| and ECE, M3 minus M1. Negative favours M3. Descriptive.
+
+Proposal table. A generated table maps RQ1 to RQ7 and H1 to H5 of the proposal to the computed estimates. Only H1 has a
+decision rule (the pre-specified primary contrast: supported if the whole 95% interval of Brier(M3) - Brier(M1) is
+below zero, contradicted if it is above zero, otherwise inconclusive). Every other row is descriptive. Items the data
+cannot address are listed as not measurable.

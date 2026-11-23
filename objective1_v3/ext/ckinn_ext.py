@@ -375,10 +375,137 @@ def external_subgroups(st):
     return pd.DataFrame(rows)
 
 
+def calibration_contrast(st):
+    from stats import calbins
+    d, p, m = st.results("A")
+
+    def cal(y, w, pr):
+        ci, cs = calibration(y, w, pr)
+        cb = calbins(y, w, pr)
+        return ci, cs, float(np.average(abs(cb.predicted - cb.observed), weights=cb.n))
+
+    y, w, _ = weights(d)
+    point = {n: cal(y, w, p[n]) for n in ("M1", "M3")}
+    rng = np.random.default_rng(st.seed + 41)
+    draws, failed, B = [], 0, n_boot(st)
+    for _ in range(B):
+        i = rng.integers(len(d), size=len(d))
+        dd = d.iloc[i].reset_index(drop=True)
+        try:
+            yy, ww, _ = weights(dd)
+            if np.unique(yy[ww > 0]).size < 2:
+                raise ValueError("single class")
+            a = {n: cal(yy, ww, p[n][i]) for n in ("M1", "M3")}
+            draws.append([abs(a["M3"][0]) - abs(a["M1"][0]), abs(a["M3"][1] - 1) - abs(a["M1"][1] - 1), a["M3"][2] - a["M1"][2]])
+        except (ValueError, FloatingPointError):
+            failed += 1
+    D = np.array(draws, dtype=float)
+    labels = ["|calibration intercept|", "|calibration slope - 1|", "ECE"]
+    pts = [(abs(point["M1"][0]), abs(point["M3"][0])), (abs(point["M1"][1] - 1), abs(point["M3"][1] - 1)), (point["M1"][2], point["M3"][2])]
+    rows = []
+    for k, (lab, (a1, a3)) in enumerate(zip(labels, pts)):
+        v = D[:, k][np.isfinite(D[:, k])] if len(D) else np.array([])
+        lo, hi = np.quantile(v, [.025, .975]) if len(v) >= max(2, .8 * B) else (np.nan, np.nan)
+        rows.append(dict(metric=lab, M1=a1, M3=a3, M3_minus_M1=a3 - a1, lo=lo, hi=hi, valid_boot=len(v), requested_boot=B, failed_boot=failed))
+    csv(out(st) / "E12_calibration_contrast.csv", rows)
+    return pd.DataFrame(rows)
+
+
+def _read(path):
+    return pd.read_csv(path, keep_default_na=False, na_values=[""]) if Path(path).exists() else None
+
+
+def _f(v, d=4):
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    if not np.isfinite(v):
+        return "NA"
+    return f"{v:.3e}" if v != 0 and abs(v) < 1e-3 else f"{v:.{d}f}"
+
+
+def proposal_evidence(st):
+    t, e = st.table / "A", out(st)
+    rows = []
+
+    def add(item, question, artifact, estimate, decision="descriptive"):
+        rows.append(dict(item=item, proposal_question=question, artifact=artifact, estimate=estimate, decision=decision))
+
+    ex, oof = _read(t / "external_metrics.csv"), _read(t / "pooled_oof.csv")
+    if ex is not None and oof is not None:
+        g = lambda df, n, k: df.set_index("model").loc[n, k]
+        add("RQ1", "Can a neural network predict future type 2 diabetes from baseline variables?", "pooled_oof.csv; external_metrics.csv",
+            f"M1 AUROC RICH OOF {_f(g(oof, 'M1', 'auroc'))}, NAGALA {_f(g(ex, 'M1', 'auroc'))}; NAGALA Brier {_f(g(ex, 'M1', 'brier'))} "
+            f"(reference {_f(g(ex, 'reference', 'brier'))}); calibration intercept {_f(g(ex, 'M1', 'cal_intercept'))}, slope {_f(g(ex, 'M1', 'cal_slope'))}")
+    pb = _read(t / "paired_brier.csv")
+    if pb is not None:
+        r = pb.iloc[0]
+        dec = "supported" if r.delta_hi < 0 else ("contradicted" if r.delta_lo > 0 else "inconclusive")
+        add("RQ2 / H1", "Does clinical knowledge improve prediction over an unconstrained network (CKINN > MLP)?", "paired_brier.csv",
+            f"Brier(M3) - Brier(M1) = {_f(r.delta)} (95% {_f(r.delta_lo)} to {_f(r.delta_hi)}); M3 lambda {_f(r.lambda_candidate, 0)}",
+            f"{dec} (pre-specified primary contrast)")
+    mp = _read(t / "matched_positive_paired_brier.csv")
+    if mp is not None:
+        r = mp.iloc[0]
+        add("RQ2 / H1 (secondary)", "Matched positive versus zero penalty, same architecture, seeds and epochs", "matched_positive_paired_brier.csv",
+            f"Brier difference {_f(r.delta)} (95% {_f(r.delta_lo)} to {_f(r.delta_hi)}); lambda {_f(r.lambda_candidate, 0)}")
+    site = _read(t / "A_RICH_site.csv")
+    if pb is not None:
+        txt = f"NAGALA paired Brier difference {_f(pb.iloc[0].delta)}"
+        if site is None:
+            txt += "; held-out-site analysis not run"
+        else:
+            done = site[site.status == "complete"] if "brier" in site else site.iloc[0:0]
+            s = done.pivot_table(index="site", columns="model", values="brier") if len(done) else pd.DataFrame()
+            if {"M1", "M3"} <= set(s.columns):
+                dd = (s["M3"] - s["M1"]).dropna()
+                txt += f"; held-out RICH sites estimable {len(dd)} of {site.site.nunique()}, M3 lower in {int((dd < 0).sum())}, median difference {_f(dd.median())}"
+            else:
+                txt += f"; no held-out RICH site met the support rule ({site.site.nunique()} sites examined)"
+        e9b = _read(e / "E9b_lambda_path_paired_brier.csv")
+        if e9b is not None:
+            r = e9b.loc[e9b.delta_brier.idxmin()]
+            txt += f"; exploratory lambda path (six directions): largest NAGALA reduction {_f(r.delta_brier)} (95% {_f(r.delta_lo)} to {_f(r.delta_hi)}) at lambda {_f(r.lambda_value, 0)}"
+        add("RQ3 / H3", "Does clinical knowledge improve cross-population generalisation?", "paired_brier.csv; A_RICH_site.csv; EXT/E9b", txt)
+    e12 = _read(e / "E12_calibration_contrast.csv")
+    if e12 is not None:
+        add("RQ4 / H2", "Do clinical constraints improve (maintain) external calibration?", "EXT/E12_calibration_contrast.csv",
+            "; ".join(f"{r.metric}: M1 {_f(r.M1)}, M3 {_f(r.M3)}, difference {_f(r.M3_minus_M1)} (95% {_f(r.lo)} to {_f(r.hi)})" for r in e12.itertuples()))
+    di, e8 = _read(t / "directions.csv"), _read(e / "E8_directions_six.csv")
+    if di is not None:
+        v = di[di.deployment == "frozen_average"].pivot_table(index="model", columns="feature", values="violation_rate")
+        txt = "; ".join(f"{m} wrong-way share FPG {_f(v.loc[m, 'fpg'], 3)}, BMI {_f(v.loc[m, 'bmi'], 3)}" for m in ["M1", "M3"] if m in v.index)
+        if e8 is not None:
+            w = e8.pivot_table(index="model", columns="feature", values="violation_rate")
+            txt += "; " + "; ".join(f"{m} HDL {_f(w.loc[m, 'hdl'], 3)}, SBP {_f(w.loc[m, 'sbp'], 3)}" for m in ["M1", "M3"] if m in w.index)
+        add("RQ5 / H4", "Are CKINN explanations more clinically consistent than an unconstrained network?", "directions.csv; attributions.csv; EXT/E8", txt)
+    sg = _read(t / "sex_gaps.csv")
+    if sg is not None:
+        parts = []
+        for r in sg.itertuples():
+            gap = getattr(r, "sensitivity_gap", np.nan)
+            parts.append(f"{r.model} {r.stage}: {r.status}" + (f", sensitivity gap {_f(gap, 3)}" if r.status.startswith("descriptive") else ""))
+        add("RQ6 / H5", "Does the model give more consistent performance across demographic groups?", "sex_gaps.csv; subgroups.csv", "; ".join(parts))
+    sub = _read(t / "subgroups.csv")
+    if sub is not None:
+        s = sub[(sub.group == "FPG_below_5.6")]
+        add("RQ7", "Can the model identify elevated risk before diagnostic thresholds are reached?", "subgroups.csv (FPG < 5.6 mmol/L)",
+            "; ".join(f"{r.model} {r.stage}: n {int(r.n)}, cases {int(r.events)}, " + (f"AUROC {_f(r.auroc, 3)}" if r.status == "estimated" else r.status) for r in s.itertuples()))
+    for item, q in [("Section 3C", "Progression from normal through prediabetes to diabetes (repeated dated states required)"),
+                    ("Section 11", "Latent metabolic state or physiological equations (glucose-insulin data required)"),
+                    ("Section 24", "Clinical expert agreement with explanations (clinician panel required)"),
+                    ("Section 26", "Clinical knowledge graph (curated evidence graph required)"),
+                    ("Section 21", "Clinical decision support and patient benefit (prospective evaluation required)")]:
+        add(item, q, "", "not measurable with these data", "not measurable")
+    csv(e / "proposal_hypotheses_evidence.csv", rows)
+    return pd.DataFrame(rows)
+
+
 def run_all(st, include_new_fits=True):
     t = {}
     for name, fn in [("E2", penalty_diagnostics), ("E3-E5", external_comparisons), ("E6-E7", aligned_and_hdl),
-                     ("E8", directions_all), ("subgroups", external_subgroups)] + (
+                     ("E8", directions_all), ("E12", calibration_contrast), ("subgroups", external_subgroups)] + (
                      [("E9", lambda_path), ("E9b", lambda_path_contrasts), ("E11", without_unsupported_sites),
                       ("E10", size_curve)] if include_new_fits else []):
         s = time.perf_counter()

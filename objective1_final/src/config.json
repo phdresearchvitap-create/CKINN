@@ -1,0 +1,153 @@
+{
+  "protocol": "Objective1-reanalysis-v2",
+  "tau": 3,
+  "seed": 1729,
+  "profile": "AUDIT",
+  "stage": "ALL",
+  "final_seed_pool": [
+    1729,
+    1730,
+    1731
+  ],
+  "profiles": {
+    "AUDIT": {
+      "outer": 0,
+      "inner": 0,
+      "trials": 0,
+      "epochs": 0,
+      "patience": 0,
+      "final_seeds": 0,
+      "bootstrap": 0,
+      "comparator_trials": 0,
+      "sample": 0
+    },
+    "SMOKE": {
+      "outer": 2,
+      "inner": 2,
+      "trials": 2,
+      "epochs": 2,
+      "patience": 1,
+      "final_seeds": 1,
+      "bootstrap": 5,
+      "comparator_trials": 1,
+      "sample": 6000
+    },
+    "STANDARD": {
+      "outer": 5,
+      "inner": 2,
+      "trials": 6,
+      "epochs": 100,
+      "patience": 10,
+      "final_seeds": 1,
+      "bootstrap": 200,
+      "comparator_trials": 2,
+      "sample": null
+    },
+    "FULL": {
+      "outer": 5,
+      "inner": 3,
+      "trials": 12,
+      "epochs": 100,
+      "patience": 10,
+      "final_seeds": 3,
+      "bootstrap": 1000,
+      "comparator_trials": 3,
+      "sample": null
+    }
+  },
+  "models": [
+    "M1",
+    "M3",
+    "reference",
+    "LR",
+    "RF",
+    "XGB",
+    "LGB",
+    "SVM",
+    "Cox"
+  ],
+  "search": {
+    "fusion": [
+      [
+        16,
+        8
+      ],
+      [
+        32,
+        16
+      ],
+      [
+        64,
+        32
+      ]
+    ],
+    "branch": [
+      4,
+      8,
+      16
+    ],
+    "lr": [
+      0.0001,
+      0.003
+    ],
+    "decay": [
+      0,
+      0.0001,
+      0.001
+    ],
+    "dropout": [
+      0,
+      0.1,
+      0.2
+    ],
+    "batch": [
+      256,
+      512,
+      1024
+    ],
+    "lambda": [
+      0,
+      1,
+      10,
+      100
+    ],
+    "comparator_C": [
+      1,
+      0.1,
+      10
+    ],
+    "ridge": [
+      0.1,
+      0.01,
+      1
+    ],
+    "depth": [
+      3,
+      5,
+      7
+    ],
+    "trees": [
+      100,
+      150,
+      200
+    ]
+  },
+  "options": {
+    "ablations": true,
+    "site_holdout": false,
+    "broader_rich": false,
+    "alt_zero": false,
+    "site_ipcw": true,
+    "explain": true,
+    "tree_shap": false,
+    "subgroups": true,
+    "target_update": false,
+    "screening": "as_coded",
+    "producer_recode_evidence": "",
+    "screen_no_code": 0
+  },
+  "min_cases": 20,
+  "min_controls": 20,
+  "update_n": 1000,
+  "device": "auto"
+}
